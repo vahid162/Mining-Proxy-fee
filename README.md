@@ -7,7 +7,7 @@
 - اتصال outbound به ViaBTC از طریق SOCKS5 (`v2rayA`)
 - حفظ اکانت اصلی از خود ماینر (دیگر `MAIN_USER` سراسری ندارد)
 - مسیر fee با اکانت جدا (`FEE_USER`)
-- کنترل نسبت fee با هدف پیش‌فرض `5%` بر مبنای accepted share count
+- کنترل نسبت fee با هدف پیش‌فرض `5%` بر مبنای accepted difficulty/work
 - failover ساده بین پورت‌های `3333` و `443`
 - endpoint متریک/سلامت روی `9100`
 - اجرای کامل با Docker Compose
@@ -69,7 +69,7 @@ docker compose up -d
 - پورت SOCKS (`20170`) فقط داخل شبکه compose استفاده می‌شود.
 - قبل از production، با canary rollout شروع کن.
 - اگر reject rate بالا رفت، سریع rollback کن (مسیر قبلی forwarding ساده).
-- نسبت fee فعلی بر مبنای تعداد share پذیرفته‌شده است (نه دشواری-وزن‌دار). برای دقت بیشتر باید difficulty-aware accounting اضافه شود.
+- نسبت fee بر پایه difficulty-weighted accepted work محاسبه می‌شود (دقیق‌تر از count خام).
 
 ## توسعه محلی و تست
 

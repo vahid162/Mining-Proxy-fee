@@ -5,14 +5,25 @@ from dataclasses import dataclass
 
 @dataclass
 class RatioTracker:
-    main_accepted: int = 0
-    fee_accepted: int = 0
+    accepted_main_count: int = 0
+    accepted_fee_count: int = 0
+    accepted_main_work: float = 0.0
+    accepted_fee_work: float = 0.0
 
     def ratio(self) -> float:
-        total = self.main_accepted + self.fee_accepted
-        if total == 0:
+        total = self.accepted_main_work + self.accepted_fee_work
+        if total <= 0:
             return 0.0
-        return self.fee_accepted / total
+        return self.accepted_fee_work / total
+
+    def record_accepted(self, route: str, difficulty: float) -> None:
+        work = difficulty if difficulty > 0 else 1.0
+        if route == "fee":
+            self.accepted_fee_count += 1
+            self.accepted_fee_work += work
+            return
+        self.accepted_main_count += 1
+        self.accepted_main_work += work
 
 
 class FeeController:

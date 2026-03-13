@@ -47,3 +47,13 @@ def extract_submit_job_id(message: StratumMessage) -> str | None:
     if message.method != "mining.submit" or len(message.params) < 2:
         return None
     return str(message.params[1])
+
+
+def extract_set_difficulty(message: StratumMessage) -> float | None:
+    if message.method != "mining.set_difficulty" or not message.params:
+        return None
+    value = message.params[0]
+    if isinstance(value, (int, float)):
+        diff = float(value)
+        return diff if diff > 0 else None
+    return None

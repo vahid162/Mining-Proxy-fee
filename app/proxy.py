@@ -7,7 +7,13 @@ from typing import Any
 
 from .config import Settings
 from .fee import FeeController, RatioTracker
-from .stratum import StratumMessage, extract_job_id, extract_submit_job_id, parse_line
+from .stratum import (
+    StratumMessage,
+    extract_job_id,
+    extract_set_difficulty,
+    extract_submit_job_id,
+    parse_line,
+)
 
 logger = logging.getLogger(__name__)
 RPC_TIMEOUT_SECONDS = 15
@@ -57,12 +63,14 @@ class MinerMetrics:
     accepted_fee: int = 0
     rejected_main: int = 0
     rejected_fee: int = 0
+    accepted_main_work: float = 0.0
+    accepted_fee_work: float = 0.0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def snapshot(self) -> dict[str, float | int]:
         async with self.lock:
-            total = self.accepted_fee + self.accepted_main
-            ratio = (self.accepted_fee / total) if total else 0.0
+            total_work = self.accepted_fee_work + self.accepted_main_work
+            ratio = (self.accepted_fee_work / total_work) if total_work else 0.0
             return {
                 "active_miners": self.active_miners,
                 "submitted_main": self.submitted_main,
@@ -71,13 +79,31 @@ class MinerMetrics:
                 "accepted_fee": self.accepted_fee,
                 "rejected_main": self.rejected_main,
                 "rejected_fee": self.rejected_fee,
+                "accepted_main_work": round(self.accepted_main_work, 6),
+                "accepted_fee_work": round(self.accepted_fee_work, 6),
                 "fee_ratio": round(ratio, 6),
             }
 
 
 @dataclass
-class RouteState:
+class PathSessionState:
+    label: str
+    current_difficulty: float = 1.0
+    jobs: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
+class MinerSessionState:
+    miner_user: str | None = None
+    miner_password: str = "x"
     active_label: str = "main"
+    job_route: dict[str, str] = field(default_factory=dict)
+    paths: dict[str, PathSessionState] = field(
+        default_factory=lambda: {
+            "main": PathSessionState("main"),
+            "fee": PathSessionState("fee"),
+        }
+    )
 
 
 class UpstreamSession:
@@ -125,10 +151,7 @@ class MinerProxy:
     async def handle(self, miner_reader: asyncio.StreamReader, miner_writer: asyncio.StreamWriter) -> None:
         controller = FeeController(self.cfg.fee_ratio)
         tracker = RatioTracker()
-        route_state = RouteState()
-        job_route: dict[str, str] = {}
-        miner_user: str | None = None
-        miner_password: str = self.cfg.main_password
+        session = MinerSessionState(miner_password=self.cfg.main_password)
         main: UpstreamSession | None = None
         fee: UpstreamSession | None = None
         try:
@@ -140,22 +163,9 @@ class MinerProxy:
             await main.connect()
             await fee.connect()
 
-            t_main = asyncio.create_task(self._relay_upstream(main, miner_writer, job_route, route_state, controller, tracker))
-            t_fee = asyncio.create_task(self._relay_upstream(fee, miner_writer, job_route, route_state, controller, tracker))
-            t_miner = asyncio.create_task(
-                self._relay_miner(
-                    miner_reader,
-                    miner_writer,
-                    main,
-                    fee,
-                    controller,
-                    tracker,
-                    job_route,
-                    route_state,
-                    miner_user,
-                    miner_password,
-                )
-            )
+            t_main = asyncio.create_task(self._relay_upstream(main, miner_writer, session, controller, tracker))
+            t_fee = asyncio.create_task(self._relay_upstream(fee, miner_writer, session, controller, tracker))
+            t_miner = asyncio.create_task(self._relay_miner(miner_reader, miner_writer, main, fee, controller, tracker, session))
 
             done, pending = await asyncio.wait({t_main, t_fee, t_miner}, return_when=asyncio.FIRST_COMPLETED)
             for task in pending:
@@ -181,12 +191,12 @@ class MinerProxy:
         self,
         upstream: UpstreamSession,
         miner_writer: asyncio.StreamWriter,
-        job_route: dict[str, str],
-        route_state: RouteState,
+        session: MinerSessionState,
         controller: FeeController,
         tracker: RatioTracker,
     ) -> None:
         assert upstream.reader is not None
+        path_state = session.paths[upstream.label]
         while True:
             line = await upstream.reader.readline()
             if not line:
@@ -198,20 +208,25 @@ class MinerProxy:
                 logger.warning("invalid_stratum_message label=%s", upstream.label)
                 continue
 
+            diff = extract_set_difficulty(message)
+            if diff is not None:
+                path_state.current_difficulty = diff
+
             if message.method == "mining.notify":
                 target = controller.select_path(tracker)
                 if upstream.label != target:
                     continue
-                route_state.active_label = upstream.label
+                session.active_label = upstream.label
                 job_id = extract_job_id(message)
                 if job_id:
-                    job_route[job_id] = upstream.label
+                    path_state.jobs[job_id] = path_state.current_difficulty
+                    session.job_route[job_id] = upstream.label
                 miner_writer.write(line)
                 await miner_writer.drain()
                 continue
 
             if message.method in ("mining.set_difficulty", "mining.set_extranonce"):
-                if upstream.label == route_state.active_label:
+                if upstream.label == session.active_label:
                     miner_writer.write(line)
                     await miner_writer.drain()
                 continue
@@ -237,10 +252,7 @@ class MinerProxy:
         fee: UpstreamSession,
         controller: FeeController,
         tracker: RatioTracker,
-        job_route: dict[str, str],
-        route_state: RouteState,
-        miner_user: str | None,
-        miner_password: str,
+        session: MinerSessionState,
     ) -> None:
         while True:
             line = await miner_reader.readline()
@@ -260,14 +272,17 @@ class MinerProxy:
 
             if method == "mining.authorize":
                 if len(msg.params) >= 1 and isinstance(msg.params[0], str):
-                    miner_user = msg.params[0]
+                    session.miner_user = msg.params[0]
                 if len(msg.params) >= 2 and isinstance(msg.params[1], str):
-                    miner_password = msg.params[1]
+                    session.miner_password = msg.params[1]
+
+                if not session.miner_user:
+                    raise RuntimeError("miner username is required before authorize")
 
                 main_authorize = {
                     "id": msg.msg_id,
                     "method": "mining.authorize",
-                    "params": [miner_user, miner_password],
+                    "params": [session.miner_user, session.miner_password],
                 }
                 fee_authorize = {
                     "id": msg.msg_id,
@@ -283,9 +298,15 @@ class MinerProxy:
                 continue
 
             if method == "mining.submit":
+                if not session.miner_user and msg.params and isinstance(msg.params[0], str):
+                    session.miner_user = msg.params[0]
+
                 job_id = extract_submit_job_id(msg)
-                route = job_route.get(job_id or "", controller.select_path(tracker))
-                route_state.active_label = route
+                route = session.job_route.get(job_id or "", controller.select_path(tracker))
+                session.active_label = route
+                route_state = session.paths[route]
+                difficulty = route_state.jobs.get(job_id or "", route_state.current_difficulty)
+
                 params = list(msg.params)
                 if route == "fee":
                     if not params:
@@ -297,20 +318,22 @@ class MinerProxy:
                     async with self.metrics.lock:
                         self.metrics.submitted_fee += 1
                         if resp.raw.get("result") is True:
+                            tracker.record_accepted("fee", difficulty)
                             self.metrics.accepted_fee += 1
-                            tracker.fee_accepted += 1
+                            self.metrics.accepted_fee_work += difficulty
                         else:
                             self.metrics.rejected_fee += 1
                 else:
-                    if params and miner_user:
-                        params[0] = miner_user
+                    if params and session.miner_user:
+                        params[0] = session.miner_user
                     req = {"id": msg.msg_id, "method": "mining.submit", "params": params}
                     resp = await self._rpc(main, req)
                     async with self.metrics.lock:
                         self.metrics.submitted_main += 1
                         if resp.raw.get("result") is True:
+                            tracker.record_accepted("main", difficulty)
                             self.metrics.accepted_main += 1
-                            tracker.main_accepted += 1
+                            self.metrics.accepted_main_work += difficulty
                         else:
                             self.metrics.rejected_main += 1
 
