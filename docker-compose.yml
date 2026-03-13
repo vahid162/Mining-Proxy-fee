@@ -1,0 +1,52 @@
+services:
+  v2raya:
+    image: mzz2017/v2raya:latest
+    container_name: v2raya
+    restart: unless-stopped
+    expose:
+      - "20170"
+    ports:
+      - "2017:2017"
+    volumes:
+      - ./deploy/v2raya:/etc/v2raya
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/20170' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  fee-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fee-proxy
+    restart: unless-stopped
+    depends_on:
+      v2raya:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "40040:40040"
+      - "9100:9100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9100', timeout=2).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  simple-forwarder:
+    image: ginuerzh/gost:latest
+    container_name: simple-forwarder
+    restart: unless-stopped
+    profiles: ["forwarder"]
+    depends_on:
+      v2raya:
+        condition: service_healthy
+    command:
+      - -L=tcp://0.0.0.0:${FORWARDER_LISTEN_PORT:-60046}/bitcoin.viabtc.io:${FORWARDER_UPSTREAM_PORT:-3333}
+      - -F=socks5://v2raya:20170
+    ports:
+      - "${FORWARDER_LISTEN_PORT:-60046}:${FORWARDER_LISTEN_PORT:-60046}"
