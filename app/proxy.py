@@ -3,20 +3,15 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from itertools import count
 from typing import Any
 
 from .config import Settings
 from .fee import FeeController, RatioTracker
-from .stratum import (
-    StratumMessage,
-    extract_job_id,
-    extract_set_difficulty,
-    extract_submit_job_id,
-    parse_line,
-)
+from .stratum import StratumMessage, extract_job_id, extract_set_difficulty, extract_submit_job_id, parse_line
 
 logger = logging.getLogger(__name__)
-RPC_TIMEOUT_SECONDS = 15
+SESSION_COUNTER = count(1)
 
 
 async def open_socks5_connection(
@@ -65,6 +60,14 @@ class MinerMetrics:
     rejected_fee: int = 0
     accepted_main_work: float = 0.0
     accepted_fee_work: float = 0.0
+    upstream_reconnects_main: int = 0
+    upstream_reconnects_fee: int = 0
+    upstream_failovers_main: int = 0
+    upstream_failovers_fee: int = 0
+    auth_failures_main: int = 0
+    auth_failures_fee: int = 0
+    job_mismatch_count: int = 0
+    dropped_sessions_max_limit: int = 0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def snapshot(self) -> dict[str, float | int]:
@@ -82,6 +85,14 @@ class MinerMetrics:
                 "accepted_main_work": round(self.accepted_main_work, 6),
                 "accepted_fee_work": round(self.accepted_fee_work, 6),
                 "fee_ratio": round(ratio, 6),
+                "upstream_reconnects_main": self.upstream_reconnects_main,
+                "upstream_reconnects_fee": self.upstream_reconnects_fee,
+                "upstream_failovers_main": self.upstream_failovers_main,
+                "upstream_failovers_fee": self.upstream_failovers_fee,
+                "auth_failures_main": self.auth_failures_main,
+                "auth_failures_fee": self.auth_failures_fee,
+                "job_mismatch_count": self.job_mismatch_count,
+                "dropped_sessions_max_limit": self.dropped_sessions_max_limit,
             }
 
 
@@ -94,10 +105,15 @@ class PathSessionState:
 
 @dataclass
 class MinerSessionState:
+    session_id: str
+    client_addr: str
     miner_user: str | None = None
     miner_password: str = "x"
     active_label: str = "main"
     job_route: dict[str, str] = field(default_factory=dict)
+    subscribe_raw: dict[str, Any] | None = None
+    main_authorized: bool = False
+    fee_authorized: bool = False
     paths: dict[str, PathSessionState] = field(
         default_factory=lambda: {
             "main": PathSessionState("main"),
@@ -113,10 +129,16 @@ class UpstreamSession:
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
         self.pending: dict[Any, asyncio.Future[StratumMessage]] = {}
+        self.pending_slots = asyncio.Semaphore(cfg.max_pending_rpcs)
+        self._ports = [self.cfg.upstream_primary_port, self.cfg.upstream_secondary_port]
+        self._active_port_index = 0
+        self.connected_port: int | None = None
 
-    async def connect(self) -> None:
+    async def connect(self, start_index: int = 0) -> None:
         last_exc: Exception | None = None
-        for port in (self.cfg.upstream_primary_port, self.cfg.upstream_secondary_port):
+        for offset in range(len(self._ports)):
+            index = (start_index + offset) % len(self._ports)
+            port = self._ports[index]
             try:
                 self.reader, self.writer = await open_socks5_connection(
                     self.cfg.socks5_host,
@@ -124,6 +146,8 @@ class UpstreamSession:
                     self.cfg.upstream_host,
                     port,
                 )
+                self._active_port_index = index
+                self.connected_port = port
                 logger.info("upstream_%s_connected port=%s", self.label, port)
                 return
             except Exception as exc:  # noqa: BLE001
@@ -131,43 +155,109 @@ class UpstreamSession:
                 logger.warning("upstream_%s_connect_failed port=%s err=%s", self.label, port, exc)
         raise RuntimeError(f"unable to connect upstream {self.label}") from last_exc
 
+    async def reconnect_with_backoff(self) -> bool:
+        await self.close()
+        backoff = self.cfg.reconnect_initial_backoff_seconds
+        attempts = 0
+        next_index = (self._active_port_index + 1) % len(self._ports)
+
+        while True:
+            try:
+                await self.connect(start_index=next_index)
+                return True
+            except Exception as exc:  # noqa: BLE001
+                attempts += 1
+                logger.warning(
+                    "upstream_%s_reconnect_failed attempt=%s err=%s backoff=%.2f",
+                    self.label,
+                    attempts,
+                    exc,
+                    backoff,
+                )
+                if self.cfg.reconnect_attempts and attempts >= self.cfg.reconnect_attempts:
+                    return False
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, self.cfg.reconnect_max_backoff_seconds)
+
     async def send(self, message: dict[str, Any]) -> None:
         if not self.writer:
             raise RuntimeError("upstream writer is not available")
         self.writer.write(StratumMessage(message).dumps())
-        await self.writer.drain()
+        await asyncio.wait_for(self.writer.drain(), timeout=self.cfg.write_timeout_seconds)
 
     async def close(self) -> None:
+        for fut in self.pending.values():
+            if not fut.done():
+                fut.cancel()
+        self.pending.clear()
+
         if self.writer:
             self.writer.close()
-            await self.writer.wait_closed()
+            try:
+                await asyncio.wait_for(self.writer.wait_closed(), timeout=2.0)
+            except (TimeoutError, asyncio.TimeoutError):
+                pass
+            self.writer = None
+            self.reader = None
 
 
 class MinerProxy:
     def __init__(self, cfg: Settings, metrics: MinerMetrics) -> None:
         self.cfg = cfg
         self.metrics = metrics
+        self._session_slots = asyncio.Semaphore(cfg.max_sessions)
+
+    def _log_session(self, session: MinerSessionState, event: str, **fields: Any) -> None:
+        pairs = " ".join(f"{key}={value}" for key, value in fields.items())
+        logger.info(
+            "event=%s session_id=%s client=%s user=%s %s",
+            event,
+            session.session_id,
+            session.client_addr,
+            session.miner_user or "-",
+            pairs,
+        )
 
     async def handle(self, miner_reader: asyncio.StreamReader, miner_writer: asyncio.StreamWriter) -> None:
+        session_id = f"s{next(SESSION_COUNTER):08d}"
+        peername = miner_writer.get_extra_info("peername")
+        client_addr = str(peername) if peername else "unknown"
+
+        try:
+            await asyncio.wait_for(self._session_slots.acquire(), timeout=0.01)
+        except asyncio.TimeoutError:
+            logger.warning("max_sessions_reached session_id=%s client=%s limit=%s", session_id, client_addr, self.cfg.max_sessions)
+            async with self.metrics.lock:
+                self.metrics.dropped_sessions_max_limit += 1
+            miner_writer.close()
+            await miner_writer.wait_closed()
+            return
+
         controller = FeeController(self.cfg.fee_ratio)
         tracker = RatioTracker()
-        session = MinerSessionState(miner_password=self.cfg.main_password)
+        session = MinerSessionState(session_id=session_id, client_addr=client_addr, miner_password=self.cfg.main_password)
         main: UpstreamSession | None = None
         fee: UpstreamSession | None = None
+        tasks: list[asyncio.Task[Any]] = []
+
         try:
             async with self.metrics.lock:
                 self.metrics.active_miners += 1
 
+            self._log_session(session, "session_start")
             main = UpstreamSession(self.cfg, "main")
             fee = UpstreamSession(self.cfg, "fee")
             await main.connect()
             await fee.connect()
+            self._log_session(session, "upstreams_connected", main_port=main.connected_port, fee_port=fee.connected_port)
 
-            t_main = asyncio.create_task(self._relay_upstream(main, miner_writer, session, controller, tracker))
-            t_fee = asyncio.create_task(self._relay_upstream(fee, miner_writer, session, controller, tracker))
-            t_miner = asyncio.create_task(self._relay_miner(miner_reader, miner_writer, main, fee, controller, tracker, session))
+            tasks = [
+                asyncio.create_task(self._relay_upstream(main, miner_writer, session, controller, tracker)),
+                asyncio.create_task(self._relay_upstream(fee, miner_writer, session, controller, tracker)),
+                asyncio.create_task(self._relay_miner(miner_reader, miner_writer, main, fee, controller, tracker, session)),
+            ]
 
-            done, pending = await asyncio.wait({t_main, t_fee, t_miner}, return_when=asyncio.FIRST_COMPLETED)
+            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             for task in pending:
                 task.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
@@ -176,16 +266,50 @@ class MinerProxy:
                 if err:
                     raise err
         except Exception as exc:  # noqa: BLE001
-            logger.warning("miner_session_ended err=%s", exc)
+            self._log_session(session, "session_error", err=exc)
         finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
             if main:
                 await main.close()
             if fee:
                 await fee.close()
             miner_writer.close()
-            await miner_writer.wait_closed()
+            try:
+                await asyncio.wait_for(miner_writer.wait_closed(), timeout=2.0)
+            except (TimeoutError, asyncio.TimeoutError):
+                pass
             async with self.metrics.lock:
                 self.metrics.active_miners -= 1
+            self._log_session(session, "session_end")
+            self._session_slots.release()
+
+    async def _safe_miner_write(self, miner_writer: asyncio.StreamWriter, payload: bytes) -> None:
+        miner_writer.write(payload)
+        await asyncio.wait_for(miner_writer.drain(), timeout=self.cfg.write_timeout_seconds)
+
+    async def _resync_after_reconnect(self, upstream: UpstreamSession, session: MinerSessionState) -> None:
+        if session.subscribe_raw is not None:
+            subscribe_payload = dict(session.subscribe_raw)
+            await self._rpc(upstream, subscribe_payload)
+
+        if session.miner_user:
+            if upstream.label == "main":
+                auth_payload = {
+                    "id": 10_000_001,
+                    "method": "mining.authorize",
+                    "params": [session.miner_user, session.miner_password],
+                }
+            else:
+                auth_payload = {
+                    "id": 10_000_002,
+                    "method": "mining.authorize",
+                    "params": [self.cfg.fee_user, self.cfg.fee_password],
+                }
+            await self._rpc(upstream, auth_payload)
 
     async def _relay_upstream(
         self,
@@ -195,17 +319,57 @@ class MinerProxy:
         controller: FeeController,
         tracker: RatioTracker,
     ) -> None:
-        assert upstream.reader is not None
         path_state = session.paths[upstream.label]
+
         while True:
-            line = await upstream.reader.readline()
-            if not line:
-                return
+            if upstream.reader is None:
+                if not await upstream.reconnect_with_backoff():
+                    raise RuntimeError(f"upstream_{upstream.label}_permanently_down")
+                await self._resync_after_reconnect(upstream, session)
+
+                async with self.metrics.lock:
+                    if upstream.label == "main":
+                        self.metrics.upstream_reconnects_main += 1
+                    else:
+                        self.metrics.upstream_reconnects_fee += 1
+                self._log_session(session, "upstream_reconnected", path=upstream.label, port=upstream.connected_port)
+
+            assert upstream.reader is not None
+            try:
+                line = await asyncio.wait_for(
+                    upstream.reader.readline(),
+                    timeout=self.cfg.upstream_read_timeout_seconds,
+                )
+                if not line:
+                    raise ConnectionError("upstream closed connection")
+            except (ConnectionError, asyncio.TimeoutError, TimeoutError) as exc:
+                old_port = upstream.connected_port
+                self._log_session(session, "upstream_read_error", path=upstream.label, err=exc, old_port=old_port)
+                if not await upstream.reconnect_with_backoff():
+                    raise RuntimeError(f"upstream_{upstream.label}_permanently_down") from exc
+                await self._resync_after_reconnect(upstream, session)
+                async with self.metrics.lock:
+                    if upstream.label == "main":
+                        self.metrics.upstream_reconnects_main += 1
+                        if old_port != upstream.connected_port:
+                            self.metrics.upstream_failovers_main += 1
+                    else:
+                        self.metrics.upstream_reconnects_fee += 1
+                        if old_port != upstream.connected_port:
+                            self.metrics.upstream_failovers_fee += 1
+                self._log_session(
+                    session,
+                    "upstream_failover",
+                    path=upstream.label,
+                    old_port=old_port,
+                    new_port=upstream.connected_port,
+                )
+                continue
 
             try:
                 message = parse_line(line)
             except Exception:  # noqa: BLE001
-                logger.warning("invalid_stratum_message label=%s", upstream.label)
+                self._log_session(session, "invalid_upstream_message", path=upstream.label)
                 continue
 
             diff = extract_set_difficulty(message)
@@ -221,14 +385,13 @@ class MinerProxy:
                 if job_id:
                     path_state.jobs[job_id] = path_state.current_difficulty
                     session.job_route[job_id] = upstream.label
-                miner_writer.write(line)
-                await miner_writer.drain()
+                await self._safe_miner_write(miner_writer, line)
+                self._log_session(session, "notify_forwarded", path=upstream.label, job_id=job_id or "-")
                 continue
 
             if message.method in ("mining.set_difficulty", "mining.set_extranonce"):
                 if upstream.label == session.active_label:
-                    miner_writer.write(line)
-                    await miner_writer.drain()
+                    await self._safe_miner_write(miner_writer, line)
                 continue
 
             if message.msg_id in upstream.pending:
@@ -237,12 +400,21 @@ class MinerProxy:
                     fut.set_result(message)
 
     async def _rpc(self, upstream: UpstreamSession, payload: dict[str, Any]) -> StratumMessage:
-        loop = asyncio.get_running_loop()
         request_id = payload.get("id")
+        if request_id is None:
+            raise RuntimeError("rpc payload requires id")
+
+        await asyncio.wait_for(upstream.pending_slots.acquire(), timeout=self.cfg.rpc_timeout_seconds)
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future[StratumMessage] = loop.create_future()
         upstream.pending[request_id] = fut
-        await upstream.send(payload)
-        return await asyncio.wait_for(fut, timeout=RPC_TIMEOUT_SECONDS)
+
+        try:
+            await upstream.send(payload)
+            return await asyncio.wait_for(fut, timeout=self.cfg.rpc_timeout_seconds)
+        finally:
+            upstream.pending.pop(request_id, None)
+            upstream.pending_slots.release()
 
     async def _relay_miner(
         self,
@@ -262,12 +434,13 @@ class MinerProxy:
             method = msg.method
 
             if method == "mining.subscribe":
+                session.subscribe_raw = dict(msg.raw)
                 main_resp = await self._rpc(main, msg.raw)
                 fee_resp = await self._rpc(fee, msg.raw)
                 if fee_resp.raw.get("error"):
-                    logger.warning("fee_subscribe_error=%s", fee_resp.raw.get("error"))
-                miner_writer.write(main_resp.dumps())
-                await miner_writer.drain()
+                    self._log_session(session, "fee_subscribe_error", error=fee_resp.raw.get("error"))
+                await self._safe_miner_write(miner_writer, main_resp.dumps())
+                self._log_session(session, "subscribe_ok")
                 continue
 
             if method == "mining.authorize":
@@ -285,16 +458,25 @@ class MinerProxy:
                     "params": [session.miner_user, session.miner_password],
                 }
                 fee_authorize = {
-                    "id": msg.msg_id,
+                    "id": f"fee-{msg.msg_id}",
                     "method": "mining.authorize",
                     "params": [self.cfg.fee_user, self.cfg.fee_password],
                 }
                 main_resp = await self._rpc(main, main_authorize)
                 fee_resp = await self._rpc(fee, fee_authorize)
+                session.main_authorized = bool(main_resp.raw.get("result") is True)
+                session.fee_authorized = bool(fee_resp.raw.get("result") is True)
+
+                async with self.metrics.lock:
+                    if not session.main_authorized:
+                        self.metrics.auth_failures_main += 1
+                    if not session.fee_authorized:
+                        self.metrics.auth_failures_fee += 1
+
+                self._log_session(session, "authorize_result", main_ok=session.main_authorized, fee_ok=session.fee_authorized)
                 if fee_resp.raw.get("error"):
-                    logger.warning("fee_authorize_error=%s", fee_resp.raw.get("error"))
-                miner_writer.write(main_resp.dumps())
-                await miner_writer.drain()
+                    self._log_session(session, "fee_authorize_error", error=fee_resp.raw.get("error"))
+                await self._safe_miner_write(miner_writer, main_resp.dumps())
                 continue
 
             if method == "mining.submit":
@@ -303,6 +485,11 @@ class MinerProxy:
 
                 job_id = extract_submit_job_id(msg)
                 route = session.job_route.get(job_id or "", controller.select_path(tracker))
+                if job_id and job_id not in session.job_route:
+                    async with self.metrics.lock:
+                        self.metrics.job_mismatch_count += 1
+                    self._log_session(session, "job_mismatch", job_id=job_id, fallback_route=route)
+
                 session.active_label = route
                 route_state = session.paths[route]
                 difficulty = route_state.jobs.get(job_id or "", route_state.current_difficulty)
@@ -337,10 +524,17 @@ class MinerProxy:
                         else:
                             self.metrics.rejected_main += 1
 
-                miner_writer.write(resp.dumps())
-                await miner_writer.drain()
+                self._log_session(
+                    session,
+                    "submit_result",
+                    route=route,
+                    job_id=job_id or "-",
+                    accepted=bool(resp.raw.get("result") is True),
+                    difficulty=round(difficulty, 6),
+                )
+                await self._safe_miner_write(miner_writer, resp.dumps())
                 continue
 
             resp = await self._rpc(main, msg.raw)
-            miner_writer.write(resp.dumps())
-            await miner_writer.drain()
+            self._log_session(session, "forward_main_method", method=method or "-")
+            await self._safe_miner_write(miner_writer, resp.dumps())

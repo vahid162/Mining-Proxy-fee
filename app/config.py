@@ -39,6 +39,14 @@ class Settings:
     fee_ratio: float = 0.05
     metrics_host: str = "0.0.0.0"
     metrics_port: int = 9100
+    max_sessions: int = 500
+    rpc_timeout_seconds: float = 15.0
+    upstream_read_timeout_seconds: float = 120.0
+    write_timeout_seconds: float = 10.0
+    reconnect_initial_backoff_seconds: float = 1.0
+    reconnect_max_backoff_seconds: float = 30.0
+    reconnect_attempts: int = 0
+    max_pending_rpcs: int = 256
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -56,9 +64,33 @@ class Settings:
             fee_ratio=_env_float("FEE_RATIO", 0.05),
             metrics_host=os.getenv("METRICS_HOST", "0.0.0.0"),
             metrics_port=_env_int("METRICS_PORT", 9100),
+            max_sessions=_env_int("MAX_SESSIONS", 500),
+            rpc_timeout_seconds=_env_float("RPC_TIMEOUT_SECONDS", 15.0),
+            upstream_read_timeout_seconds=_env_float("UPSTREAM_READ_TIMEOUT_SECONDS", 120.0),
+            write_timeout_seconds=_env_float("WRITE_TIMEOUT_SECONDS", 10.0),
+            reconnect_initial_backoff_seconds=_env_float("RECONNECT_INITIAL_BACKOFF_SECONDS", 1.0),
+            reconnect_max_backoff_seconds=_env_float("RECONNECT_MAX_BACKOFF_SECONDS", 30.0),
+            reconnect_attempts=_env_int("RECONNECT_ATTEMPTS", 0),
+            max_pending_rpcs=_env_int("MAX_PENDING_RPCS", 256),
         )
         if not (0 < cfg.fee_ratio < 1):
             raise ValueError("FEE_RATIO must be between 0 and 1")
         if not cfg.fee_user:
             raise ValueError("FEE_USER is required")
+        if cfg.max_sessions < 1:
+            raise ValueError("MAX_SESSIONS must be >= 1")
+        if cfg.rpc_timeout_seconds <= 0:
+            raise ValueError("RPC_TIMEOUT_SECONDS must be > 0")
+        if cfg.upstream_read_timeout_seconds <= 0:
+            raise ValueError("UPSTREAM_READ_TIMEOUT_SECONDS must be > 0")
+        if cfg.write_timeout_seconds <= 0:
+            raise ValueError("WRITE_TIMEOUT_SECONDS must be > 0")
+        if cfg.reconnect_initial_backoff_seconds <= 0:
+            raise ValueError("RECONNECT_INITIAL_BACKOFF_SECONDS must be > 0")
+        if cfg.reconnect_max_backoff_seconds < cfg.reconnect_initial_backoff_seconds:
+            raise ValueError("RECONNECT_MAX_BACKOFF_SECONDS must be >= RECONNECT_INITIAL_BACKOFF_SECONDS")
+        if cfg.reconnect_attempts < 0:
+            raise ValueError("RECONNECT_ATTEMPTS must be >= 0")
+        if cfg.max_pending_rpcs < 1:
+            raise ValueError("MAX_PENDING_RPCS must be >= 1")
         return cfg
