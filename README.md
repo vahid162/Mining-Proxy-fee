@@ -8,14 +8,19 @@
 - حفظ اکانت اصلی از خود ماینر (دیگر `MAIN_USER` سراسری ندارد)
 - مسیر fee با اکانت جدا (`FEE_USER`)
 - کنترل نسبت fee با هدف پیش‌فرض `5%` بر مبنای accepted difficulty/work
-- failover ساده بین پورت‌های `3333` و `443`
+- failover پویا بین پورت‌های `3333` و `443`
 - endpoint متریک/سلامت روی `9100`
+- جداسازی پورت fee (`40040`) از پورت forwarding ساده (`60046`) در Compose
 - اجرای کامل با Docker Compose
 
 ## معماری
 
 ```text
-Miner -> fee-proxy (Python) -> v2rayA SOCKS5 -> ViaBTC
+(پورت feeدار 40040)
+Miner -> fee-proxy (Python, Stratum-aware) -> v2rayA SOCKS5 -> ViaBTC
+
+(پورت forwarding ساده 60046 - اختیاری)
+Miner -> simple-forwarder(gost) -> v2rayA SOCKS5 -> ViaBTC
 ```
 
 ## پیش‌نیازها
@@ -38,6 +43,12 @@ cp .env.example .env
 
 ```bash
 docker compose up -d --build
+```
+
+اگر پورت forwarding ساده (`60046`) را هم می‌خواهی:
+
+```bash
+docker compose --profile forwarder up -d
 ```
 
 4) وضعیت سرویس‌ها:
@@ -79,3 +90,9 @@ python -m pytest -q
 
 ## نسخه
 نسخه فعلی در فایل `VERSION` نگهداری می‌شود.
+
+
+## مرزبندی محصول (خیلی مهم)
+- Compose فقط orchestration می‌دهد (شبکه/health/lifecycle).
+- منطق correctness شامل `fee ratio`, `session state`, `job routing` باید داخل `fee-proxy` باشد (و همین‌طور پیاده‌سازی شده).
+- `simple-forwarder` عمداً Stratum-aware نیست و فقط برای پورت‌های non-fee استفاده می‌شود.
