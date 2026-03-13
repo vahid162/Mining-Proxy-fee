@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.2
+- Add an explicit canary rollout and rollback runbook in README with step-by-step operational commands and gating metrics.
+
 ## 0.3.1
 - Separate fee port and simple forwarding port at Compose level (optional `simple-forwarder` profile) and document product boundary: orchestration in Compose, correctness logic inside proxy.
 

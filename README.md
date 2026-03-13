@@ -96,3 +96,27 @@ python -m pytest -q
 - Compose فقط orchestration می‌دهد (شبکه/health/lifecycle).
 - منطق correctness شامل `fee ratio`, `session state`, `job routing` باید داخل `fee-proxy` باشد (و همین‌طور پیاده‌سازی شده).
 - `simple-forwarder` عمداً Stratum-aware نیست و فقط برای پورت‌های non-fee استفاده می‌شود.
+
+
+## Canary Rollout (قدم‌به‌قدم)
+1) **آماده‌سازی**
+- از `.env` بکاپ بگیر و مطمئن شو `FEE_USER` درست تنظیم شده.
+- ابتدا فقط سرویس fee-proxy را بالا بیاور: `docker compose up -d --build fee-proxy`
+
+2) **شروع با درصد کم ماینرها**
+- فقط 5% تا 10% ماینرها را موقتاً به پورت `40040` بفرست.
+- بقیه ماینرها روی مسیر قبلی یا `60046` (forwarding ساده) بمانند.
+
+3) **پایش 15 تا 30 دقیقه‌ای**
+- لاگ زنده: `docker compose logs -f fee-proxy`
+- متریک: `curl http://127.0.0.1:9100`
+- شاخص‌های حیاتی: `rejected_main/rejected_fee`, `upstream_reconnects_*`, `upstream_failovers_*`, `fee_ratio`
+
+4) **افزایش تدریجی**
+- اگر reject rate غیرعادی نبود، ترافیک را مرحله‌ای زیاد کن (مثلاً 10% → 25% → 50% → 100%).
+- بین هر مرحله حداقل 10 تا 20 دقیقه پایش انجام بده.
+
+5) **Rollback فوری (اگر مشکل دیدی)**
+- فوراً ماینرهای canary را به مسیر قبلی برگردان.
+- در صورت نیاز سرویس را پایین بیاور: `docker compose down`
+- لاگ و snapshot متریک را برای عیب‌یابی نگه دار.
