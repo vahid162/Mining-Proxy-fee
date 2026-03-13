@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.3
+- Fix invalid Compose healthcheck quoting for `fee-proxy` and sync docs with runtime behavior (`MAIN_USER` not required, integration tests included in `pytest -q`).
+
 ## 0.3.2
 - Add an explicit canary rollout and rollback runbook in README with step-by-step operational commands and gating metrics.
 
