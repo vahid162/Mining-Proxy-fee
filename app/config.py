@@ -33,7 +33,6 @@ class Settings:
     upstream_host: str = "bitcoin.viabtc.io"
     upstream_primary_port: int = 3333
     upstream_secondary_port: int = 443
-    main_user: str = ""
     main_password: str = "x"
     fee_user: str = ""
     fee_password: str = "x"
@@ -51,7 +50,6 @@ class Settings:
             upstream_host=os.getenv("UPSTREAM_HOST", "bitcoin.viabtc.io"),
             upstream_primary_port=_env_int("UPSTREAM_PRIMARY_PORT", 3333),
             upstream_secondary_port=_env_int("UPSTREAM_SECONDARY_PORT", 443),
-            main_user=os.getenv("MAIN_USER", ""),
             main_password=os.getenv("MAIN_PASSWORD", "x"),
             fee_user=os.getenv("FEE_USER", ""),
             fee_password=os.getenv("FEE_PASSWORD", "x"),
@@ -61,8 +59,6 @@ class Settings:
         )
         if not (0 < cfg.fee_ratio < 1):
             raise ValueError("FEE_RATIO must be between 0 and 1")
-        if not cfg.main_user:
-            raise ValueError("MAIN_USER is required")
         if not cfg.fee_user:
             raise ValueError("FEE_USER is required")
         return cfg
