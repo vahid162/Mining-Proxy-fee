@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.4
+- Harden Compose healthcheck format for `fee-proxy` by switching to `CMD` array form (avoids shell-quote parsing issues across environments).
+
 ## 0.3.3
 - Fix invalid Compose healthcheck quoting for `fee-proxy` and sync docs with runtime behavior (`MAIN_USER` not required, integration tests included in `pytest -q`).
 
