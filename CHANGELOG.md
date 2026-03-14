@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.4
+- Add Docker log rotation settings (`json-file` with `DOCKER_LOG_MAX_SIZE` / `DOCKER_LOG_MAX_FILE`) for all Compose services.
+- Document production monitoring/log-handling guidance (structured logs + metrics collection) in README.
+
 ## 0.4.3
 - Add GitHub Actions release workflow triggered by SemVer tags (`vX.Y.Z`) with version consistency check against `VERSION` and automatic GitHub Release publication.
 - Document step-by-step release process in README to move project from source-deploy toward packaged release maturity.

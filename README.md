@@ -41,6 +41,7 @@ cp .env.example .env
 - `UPSTREAM_HOST/UPSTREAM_PRIMARY_PORT/UPSTREAM_SECONDARY_PORT` برای مسیر main
 - `FEE_UPSTREAM_HOST/FEE_UPSTREAM_PRIMARY_PORT/FEE_UPSTREAM_SECONDARY_PORT` برای مسیر fee (در صورت نیاز به pool/domain جدا)
 - `LISTEN_PORT` و `METRICS_PORT` برای پورت‌های fee-proxy
+- `DOCKER_LOG_MAX_SIZE` و `DOCKER_LOG_MAX_FILE` برای log rotation کانتینرها
 - `MAIN_USER` لازم نیست (main user از `mining.authorize` ورودی خوانده می‌شود)
 - در ماینر، اکانت اصلی کاربر را همان‌طور که هست قرار بده
 
@@ -83,6 +84,17 @@ docker compose up -d
 - اگر reject rate بالا رفت، سریع rollback کن (مسیر قبلی forwarding ساده).
 - نسبت fee بر پایه difficulty-weighted accepted work محاسبه می‌شود (دقیق‌تر از count خام).
 
+## Monitoring و Log Handling (برای Production)
+- لاگ‌ها JSON ساختاریافته هستند و روی stdout نوشته می‌شوند (برای جمع‌آوری توسط Loki/ELK/Fluent Bit مناسب‌اند).
+- متریک‌ها از endpoint سلامت/متریک در `METRICS_PORT` قابل scrape هستند.
+- در Compose، برای همه سرویس‌ها log rotation فعال شده (`json-file` + `max-size`/`max-file`) تا رشد بی‌نهایت لاگ رخ ندهد.
+
+نمونه بررسی سریع:
+```bash
+docker compose logs --tail=200 fee-proxy
+curl http://127.0.0.1:${METRICS_PORT:-9100}
+```
+
 ## پیش‌نیاز مسیر volume برای v2rayA
 چون در Compose این mount وجود دارد:
 
@@ -109,8 +121,8 @@ python -m pytest -q
 
 نمونه دستورات:
 ```bash
-git tag v0.4.3
-git push origin v0.4.3
+git tag v0.4.4
+git push origin v0.4.4
 ```
 
 > نکته: اگر release در GitHub دیده نمی‌شود، یعنی هنوز tag/release رسمی publish نشده است.
