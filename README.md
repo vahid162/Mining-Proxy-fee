@@ -41,6 +41,7 @@ cp .env.example .env
 - `UPSTREAM_HOST/UPSTREAM_PRIMARY_PORT/UPSTREAM_SECONDARY_PORT` برای مسیر main
 - `FEE_UPSTREAM_HOST/FEE_UPSTREAM_PRIMARY_PORT/FEE_UPSTREAM_SECONDARY_PORT` برای مسیر fee (در صورت نیاز به pool/domain جدا)
 - `LISTEN_PORT` و `METRICS_PORT` برای پورت‌های fee-proxy
+- `FORWARDER_UPSTREAM_HOST` و `FORWARDER_UPSTREAM_PORT` برای مقصد upstream در simple-forwarder
 - `METRICS_BIND_HOST` (پیش‌فرض `127.0.0.1`) برای محدودکردن exposure متریک
 - `V2RAYA_UI_BIND_HOST` و `V2RAYA_UI_PORT` برای محدودکردن دسترسی پنل v2rayA
 - `V2RAYA_IMAGE` و `GOST_IMAGE` برای pin/کنترل نسخه imageها
@@ -90,8 +91,9 @@ docker compose up -d
 ## Hardening Checklist (الان یا بعداً؟)
 1. **Pin image tagها**: قابل پیاده‌سازی است و الان با env انجام شده (`V2RAYA_IMAGE`, `GOST_IMAGE`). پیشنهاد: ابتدا روی staging تست کن، بعد روی نسخهٔ پایدار pin کن.
 2. **پورت‌های env-driven**: برای fee-proxy انجام شده (`LISTEN_PORT`, `METRICS_PORT`) و برای پنل v2rayA هم env-driven شد (`V2RAYA_UI_PORT`).
-3. **محدود کردن exposure پورت‌های 2017 و 9100**: الان به‌صورت پیش‌فرض localhost-only شده (`V2RAYA_UI_BIND_HOST=127.0.0.1`, `METRICS_BIND_HOST=127.0.0.1`).
-4. **Canary + مسیر rollback**: باید عملیاتی اجرا شود (توسط اپراتور). مسیر `60046` برای rollback نگه داشته شده و runbook canary در همین README موجود است.
+3. **upstream ساده‌ی قابل‌تنظیم**: برای `simple-forwarder` هم host/port از env می‌آید (`FORWARDER_UPSTREAM_HOST`, `FORWARDER_UPSTREAM_PORT`).
+4. **محدود کردن exposure پورت‌های 2017 و 9100**: الان به‌صورت پیش‌فرض localhost-only شده (`V2RAYA_UI_BIND_HOST=127.0.0.1`, `METRICS_BIND_HOST=127.0.0.1`).
+5. **Canary + مسیر rollback**: باید عملیاتی اجرا شود (توسط اپراتور). مسیر `60046` برای rollback نگه داشته شده و runbook canary در همین README موجود است.
 
 ## Monitoring و Log Handling (برای Production)
 - لاگ‌ها JSON ساختاریافته هستند و روی stdout نوشته می‌شوند (برای جمع‌آوری توسط Loki/ELK/Fluent Bit مناسب‌اند).

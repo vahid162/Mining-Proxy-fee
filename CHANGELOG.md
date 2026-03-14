@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.6
+- Make `simple-forwarder` upstream host configurable via new `FORWARDER_UPSTREAM_HOST` env in Compose and `.env.example` (host is no longer hardcoded).
+- Keep fee-proxy ports and healthcheck fully env-driven (`LISTEN_PORT`, `METRICS_PORT`) and align docs with runtime behavior.
+
 ## 0.4.5
 - Make image references configurable via env (`V2RAYA_IMAGE`, `GOST_IMAGE`) to support controlled version pinning.
 - Reduce default exposure by binding v2rayA UI and metrics ports to localhost (`V2RAYA_UI_BIND_HOST`, `METRICS_BIND_HOST`).
