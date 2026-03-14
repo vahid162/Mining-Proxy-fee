@@ -1,12 +1,12 @@
 services:
   v2raya:
-    image: mzz2017/v2raya:latest
+    image: ${V2RAYA_IMAGE:-mzz2017/v2raya:latest}
     container_name: v2raya
     restart: unless-stopped
     expose:
       - "20170"
     ports:
-      - "2017:2017"
+      - "${V2RAYA_UI_BIND_HOST:-127.0.0.1}:${V2RAYA_UI_PORT:-2017}:2017"
     volumes:
       - ./deploy/v2raya:/etc/v2raya
     healthcheck:
@@ -15,6 +15,11 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
 
   fee-proxy:
     build:
@@ -28,17 +33,22 @@ services:
     env_file:
       - .env
     ports:
-      - "40040:40040"
-      - "9100:9100"
+      - "${LISTEN_PORT:-40040}:${LISTEN_PORT:-40040}"
+      - "${METRICS_BIND_HOST:-127.0.0.1}:${METRICS_PORT:-9100}:${METRICS_PORT:-9100}"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9100', timeout=2).read()"]
+      test: ["CMD-SHELL", "python -c 'import os, urllib.request; urllib.request.urlopen(\"http://127.0.0.1:%s\" % os.getenv(\"METRICS_PORT\", \"9100\"), timeout=2).read()'"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
 
   simple-forwarder:
-    image: ginuerzh/gost:latest
+    image: ${GOST_IMAGE:-ginuerzh/gost:latest}
     container_name: simple-forwarder
     restart: unless-stopped
     depends_on:
@@ -49,3 +59,8 @@ services:
       - -F=socks5://v2raya:20170
     ports:
       - "${FORWARDER_LISTEN_PORT:-60046}:${FORWARDER_LISTEN_PORT:-60046}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
