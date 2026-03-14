@@ -33,6 +33,9 @@ class Settings:
     upstream_host: str = "bitcoin.viabtc.io"
     upstream_primary_port: int = 3333
     upstream_secondary_port: int = 443
+    fee_upstream_host: str = "bitcoin.viabtc.io"
+    fee_upstream_primary_port: int = 3333
+    fee_upstream_secondary_port: int = 443
     main_password: str = "x"
     fee_user: str = ""
     fee_password: str = "x"
@@ -58,6 +61,9 @@ class Settings:
             upstream_host=os.getenv("UPSTREAM_HOST", "bitcoin.viabtc.io"),
             upstream_primary_port=_env_int("UPSTREAM_PRIMARY_PORT", 3333),
             upstream_secondary_port=_env_int("UPSTREAM_SECONDARY_PORT", 443),
+            fee_upstream_host=os.getenv("FEE_UPSTREAM_HOST", os.getenv("UPSTREAM_HOST", "bitcoin.viabtc.io")),
+            fee_upstream_primary_port=_env_int("FEE_UPSTREAM_PRIMARY_PORT", _env_int("UPSTREAM_PRIMARY_PORT", 3333)),
+            fee_upstream_secondary_port=_env_int("FEE_UPSTREAM_SECONDARY_PORT", _env_int("UPSTREAM_SECONDARY_PORT", 443)),
             main_password=os.getenv("MAIN_PASSWORD", "x"),
             fee_user=os.getenv("FEE_USER", ""),
             fee_password=os.getenv("FEE_PASSWORD", "x"),
