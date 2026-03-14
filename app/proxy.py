@@ -211,6 +211,25 @@ class MinerProxy:
         self.cfg = cfg
         self.metrics = metrics
         self._session_slots = asyncio.Semaphore(cfg.max_sessions)
+        self._global_tracker = RatioTracker()
+        self._global_tracker_lock = asyncio.Lock()
+
+
+    async def _select_path(self, controller: FeeController, session_tracker: RatioTracker) -> str:
+        if self.cfg.fee_ratio_scope == "session":
+            return controller.select_path(session_tracker)
+
+        async with self._global_tracker_lock:
+            return controller.select_path(self._global_tracker)
+
+    async def _record_accepted(self, route: str, difficulty: float, session_tracker: RatioTracker) -> None:
+        session_tracker.record_accepted(route, difficulty)
+        if self.cfg.fee_ratio_scope == "global":
+            async with self._global_tracker_lock:
+                self._global_tracker.record_accepted(route, difficulty)
+
+    def _should_fail_on_fee_startup_error(self) -> bool:
+        return self.cfg.fee_path_startup_policy == "strict"
 
     def _log_session(self, session: MinerSessionState, event: str, **fields: Any) -> None:
         pairs = " ".join(f"{key}={value}" for key, value in fields.items())
@@ -382,7 +401,7 @@ class MinerProxy:
                 path_state.current_difficulty = diff
 
             if message.method == "mining.notify":
-                target = controller.select_path(tracker)
+                target = await self._select_path(controller, tracker)
                 if upstream.label != target:
                     continue
                 session.active_label = upstream.label
@@ -444,6 +463,8 @@ class MinerProxy:
                 fee_resp = await self._rpc(fee, msg.raw)
                 if fee_resp.raw.get("error"):
                     self._log_session(session, "fee_subscribe_error", error=fee_resp.raw.get("error"))
+                    if self._should_fail_on_fee_startup_error():
+                        raise RuntimeError("fee_subscribe_failed")
                 await self._safe_miner_write(miner_writer, main_resp.dumps())
                 self._log_session(session, "subscribe_ok")
                 continue
@@ -481,6 +502,8 @@ class MinerProxy:
                 self._log_session(session, "authorize_result", main_ok=session.main_authorized, fee_ok=session.fee_authorized)
                 if fee_resp.raw.get("error"):
                     self._log_session(session, "fee_authorize_error", error=fee_resp.raw.get("error"))
+                if not session.fee_authorized and self._should_fail_on_fee_startup_error():
+                    raise RuntimeError("fee_authorize_failed")
                 await self._safe_miner_write(miner_writer, main_resp.dumps())
                 continue
 
@@ -489,7 +512,8 @@ class MinerProxy:
                     session.miner_user = msg.params[0]
 
                 job_id = extract_submit_job_id(msg)
-                route = session.job_route.get(job_id or "", controller.select_path(tracker))
+                fallback_route = await self._select_path(controller, tracker)
+                route = session.job_route.get(job_id or "", fallback_route)
                 if job_id and job_id not in session.job_route:
                     async with self.metrics.lock:
                         self.metrics.job_mismatch_count += 1
@@ -510,7 +534,7 @@ class MinerProxy:
                     async with self.metrics.lock:
                         self.metrics.submitted_fee += 1
                         if resp.raw.get("result") is True:
-                            tracker.record_accepted("fee", difficulty)
+                            await self._record_accepted("fee", difficulty, tracker)
                             self.metrics.accepted_fee += 1
                             self.metrics.accepted_fee_work += difficulty
                         else:
@@ -523,7 +547,7 @@ class MinerProxy:
                     async with self.metrics.lock:
                         self.metrics.submitted_main += 1
                         if resp.raw.get("result") is True:
-                            tracker.record_accepted("main", difficulty)
+                            await self._record_accepted("main", difficulty, tracker)
                             self.metrics.accepted_main += 1
                             self.metrics.accepted_main_work += difficulty
                         else:

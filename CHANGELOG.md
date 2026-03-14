@@ -1,7 +1,9 @@
 # Changelog
 
 ## 0.4.9
-- Fix release command example in README to use generic `vX.Y.Z` tags, preventing future version drift in docs.
+- Add configurable fee ratio scope (`FEE_RATIO_SCOPE`) and switch default control to global scope so fee ratio targeting matches service-wide metrics.
+- Add configurable fee path startup policy (`FEE_PATH_STARTUP_POLICY`) with strict fail-fast default when fee subscribe/authorize fails.
+- Extend config and proxy tests for new scope/policy behavior and validation.
 
 ## 0.4.8
 - Fix outdated release command example in README to use current SemVer tag format aligned with latest documented version flow.

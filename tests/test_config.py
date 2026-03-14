@@ -67,3 +67,36 @@ def test_settings_fee_upstream_can_be_overridden(monkeypatch) -> None:
     assert cfg.fee_upstream_host == "fee.pool.local"
     assert cfg.fee_upstream_primary_port == 3335
     assert cfg.fee_upstream_secondary_port == 4445
+
+
+def test_settings_defaults_ratio_scope_and_startup_policy(monkeypatch) -> None:
+    monkeypatch.setenv("FEE_USER", "fee.wallet.worker")
+    monkeypatch.delenv("FEE_RATIO_SCOPE", raising=False)
+    monkeypatch.delenv("FEE_PATH_STARTUP_POLICY", raising=False)
+
+    cfg = Settings.from_env()
+
+    assert cfg.fee_ratio_scope == "global"
+    assert cfg.fee_path_startup_policy == "strict"
+
+
+def test_settings_rejects_invalid_ratio_scope(monkeypatch) -> None:
+    monkeypatch.setenv("FEE_USER", "fee.wallet.worker")
+    monkeypatch.setenv("FEE_RATIO_SCOPE", "miner")
+
+    try:
+        Settings.from_env()
+        raise AssertionError("Expected ValueError")
+    except ValueError as exc:
+        assert "FEE_RATIO_SCOPE" in str(exc)
+
+
+def test_settings_rejects_invalid_fee_startup_policy(monkeypatch) -> None:
+    monkeypatch.setenv("FEE_USER", "fee.wallet.worker")
+    monkeypatch.setenv("FEE_PATH_STARTUP_POLICY", "log_only")
+
+    try:
+        Settings.from_env()
+        raise AssertionError("Expected ValueError")
+    except ValueError as exc:
+        assert "FEE_PATH_STARTUP_POLICY" in str(exc)
