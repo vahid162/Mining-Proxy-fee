@@ -45,6 +45,7 @@ class FakePool:
     name: str
     default_difficulty: float
     close_on_submit: bool = False
+    authorize_success: bool = True
     writers: list[asyncio.StreamWriter] = field(default_factory=list)
     authorizations: list[str] = field(default_factory=list)
     submits: list[tuple[str, str]] = field(default_factory=list)
@@ -66,7 +67,7 @@ class FakePool:
                 elif method == "mining.authorize":
                     user = msg.get("params", [""])[0]
                     self.authorizations.append(user)
-                    resp = {"id": mid, "result": True, "error": None}
+                    resp = {"id": mid, "result": self.authorize_success, "error": None}
                     await send_msg(writer, resp)
                 elif method == "mining.submit":
                     user = msg.get("params", ["", ""])[0]
@@ -156,9 +157,13 @@ async def socks5_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWri
             await writer.wait_closed()
 
 
-async def setup_system(close_primary_on_submit: bool = False):
+async def setup_system(
+    close_primary_on_submit: bool = False,
+    fee_authorize_success: bool = True,
+    fee_path_startup_policy: str = "strict",
+):
     primary_pool = FakePool("primary", default_difficulty=4.0, close_on_submit=close_primary_on_submit)
-    secondary_pool = FakePool("secondary", default_difficulty=16.0)
+    secondary_pool = FakePool("secondary", default_difficulty=16.0, authorize_success=fee_authorize_success)
 
     primary_server = await asyncio.start_server(primary_pool.handle, "127.0.0.1", 0)
     secondary_server = await asyncio.start_server(secondary_pool.handle, "127.0.0.1", 0)
@@ -167,6 +172,9 @@ async def setup_system(close_primary_on_submit: bool = False):
 
     socks_server = await asyncio.start_server(socks5_handler, "127.0.0.1", 0)
     socks_port = socks_server.sockets[0].getsockname()[1]
+
+    fee_primary_port = secondary_port if not fee_authorize_success else primary_port
+    fee_secondary_port = primary_port if not fee_authorize_success else secondary_port
 
     cfg = Settings(
         listen_host="127.0.0.1",
@@ -177,8 +185,8 @@ async def setup_system(close_primary_on_submit: bool = False):
         upstream_primary_port=primary_port,
         upstream_secondary_port=secondary_port,
         fee_upstream_host="127.0.0.1",
-        fee_upstream_primary_port=primary_port,
-        fee_upstream_secondary_port=secondary_port,
+        fee_upstream_primary_port=fee_primary_port,
+        fee_upstream_secondary_port=fee_secondary_port,
         fee_user="fee.wallet.worker",
         fee_password="x",
         fee_ratio=0.05,
@@ -189,6 +197,7 @@ async def setup_system(close_primary_on_submit: bool = False):
         reconnect_max_backoff_seconds=0.2,
         reconnect_attempts=20,
         max_pending_rpcs=64,
+        fee_path_startup_policy=fee_path_startup_policy,
     )
 
     metrics = MinerMetrics()
@@ -320,6 +329,60 @@ def test_integration_happy_path_dual_upstream_and_difficulty() -> None:
 
 def test_integration_runtime_failover_and_reconnect() -> None:
     asyncio.run(integration_failover_reconnect())
+
+
+async def integration_job_mismatch_metric_increment() -> None:
+    system = await setup_system(close_primary_on_submit=False)
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["main.wallet.worker1", "unknown-job", "aa", "bb", "cc"]})
+        submit_resp = await read_msg(reader)
+        assert submit_resp["result"] is True
+
+        snapshot = await system["metrics"].snapshot()
+        assert snapshot["job_mismatch_count"] == 1
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
+
+
+async def integration_auth_failures_fee_metric_increment() -> None:
+    system = await setup_system(close_primary_on_submit=False, fee_authorize_success=False, fee_path_startup_policy="best_effort")
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        auth_resp = await read_msg(reader)
+        assert auth_resp["result"] is True
+
+        snapshot = await system["metrics"].snapshot()
+        assert snapshot["auth_failures_fee"] == 1
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
+
+
+
+def test_integration_job_mismatch_metric_increment() -> None:
+    asyncio.run(integration_job_mismatch_metric_increment())
+
+
+def test_integration_auth_failures_fee_metric_increment() -> None:
+    asyncio.run(integration_auth_failures_fee_metric_increment())
 
 
 def test_upstream_session_uses_fee_specific_upstream() -> None:

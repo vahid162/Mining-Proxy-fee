@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.10
+- Add versioned `fee-proxy` image naming in Compose via `FEE_PROXY_IMAGE` + `APP_VERSION` and sync `.env.example`/README with runtime env variables.
+- Ensure global fee ratio mode uses shared controller + shared tracker path selection in proxy.
+- Expand CI to explicitly install test dependency (`pytest`) before running tests.
+- Add tests for `FEE_RATIO` and `MAX_PENDING_RPCS` validation plus integration checks for `job_mismatch_count` and `auth_failures_fee` metrics.
+
+## 0.4.9
+- Add configurable fee ratio scope (`FEE_RATIO_SCOPE`) and switch default control to global scope so fee ratio targeting matches service-wide metrics.
+- Add configurable fee path startup policy (`FEE_PATH_STARTUP_POLICY`) with strict fail-fast default when fee subscribe/authorize fails.
+- Extend config and proxy tests for new scope/policy behavior and validation.
+
 ## 0.4.8
 - Fix outdated release command example in README to use current SemVer tag format aligned with latest documented version flow.
 
