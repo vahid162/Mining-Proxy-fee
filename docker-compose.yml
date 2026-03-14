@@ -41,7 +41,6 @@ services:
     image: ginuerzh/gost:latest
     container_name: simple-forwarder
     restart: unless-stopped
-    profiles: ["forwarder"]
     depends_on:
       v2raya:
         condition: service_healthy

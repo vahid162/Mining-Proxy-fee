@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.5
+- Make `simple-forwarder` active by default in Compose so port `60046` is always a pure forwarding path and never enters fee logic.
+- Update README to explicitly state that `60046` stays outside fee-aware proxy logic.
+
 ## 0.3.4
 - Harden Compose healthcheck format for `fee-proxy` by switching to `CMD` array form (avoids shell-quote parsing issues across environments).
 

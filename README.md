@@ -19,7 +19,7 @@
 (پورت feeدار 40040)
 Miner -> fee-proxy (Python, Stratum-aware) -> v2rayA SOCKS5 -> ViaBTC
 
-(پورت forwarding ساده 60046 - اختیاری)
+(پورت forwarding ساده 60046 - همیشه جدا از fee-proxy)
 Miner -> simple-forwarder(gost) -> v2rayA SOCKS5 -> ViaBTC
 ```
 
@@ -46,11 +46,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-اگر پورت forwarding ساده (`60046`) را هم می‌خواهی:
-
-```bash
-docker compose --profile forwarder up -d
-```
+پورت forwarding ساده (`60046`) هم به‌صورت پیش‌فرض با استک بالا می‌آید و وارد منطق fee نمی‌شود.
 
 4) وضعیت سرویس‌ها:
 
@@ -94,6 +90,7 @@ python -m pytest -q
 
 
 ## مرزبندی محصول (خیلی مهم)
+- `60046` فقط forwarding ساده است و وارد منطق fee در `fee-proxy` نمی‌شود.
 - Compose فقط orchestration می‌دهد (شبکه/health/lifecycle).
 - منطق correctness شامل `fee ratio`, `session state`, `job routing` باید داخل `fee-proxy` باشد (و همین‌طور پیاده‌سازی شده).
 - `simple-forwarder` عمداً Stratum-aware نیست و فقط برای پورت‌های non-fee استفاده می‌شود.
