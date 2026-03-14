@@ -31,7 +31,7 @@ services:
       - "${LISTEN_PORT:-40040}:${LISTEN_PORT:-40040}"
       - "${METRICS_PORT:-9100}:${METRICS_PORT:-9100}"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9100', timeout=2).read()"]
+      test: ["CMD-SHELL", "python -c 'import os, urllib.request; urllib.request.urlopen(\"http://127.0.0.1:%s\" % os.getenv(\"METRICS_PORT\", \"9100\"), timeout=2).read()'"]
       interval: 10s
       timeout: 5s
       retries: 5

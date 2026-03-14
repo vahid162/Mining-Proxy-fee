@@ -9,7 +9,7 @@
 - مسیر fee با اکانت جدا (`FEE_USER`)
 - کنترل نسبت fee با هدف پیش‌فرض `5%` بر مبنای accepted difficulty/work
 - failover پویا بین پورت‌های primary/secondary برای main و fee (با امکان upstream جدا برای fee)
-- endpoint متریک/سلامت روی `9100`
+- endpoint متریک/سلامت روی `METRICS_PORT` (پیش‌فرض `9100`)
 - جداسازی پورت fee (`40040`) از پورت forwarding ساده (`60046`) در Compose
 - اجرای کامل با Docker Compose
 
@@ -67,7 +67,7 @@ docker compose logs -f fee-proxy
 6) بررسی health/metrics:
 
 ```bash
-curl http://127.0.0.1:9100
+curl http://127.0.0.1:${METRICS_PORT:-9100}
 ```
 
 ## توقف / راه‌اندازی مجدد
@@ -111,7 +111,7 @@ python -m pytest -q
 
 3) **پایش 15 تا 30 دقیقه‌ای**
 - لاگ زنده: `docker compose logs -f fee-proxy`
-- متریک: `curl http://127.0.0.1:9100`
+- متریک: `curl http://127.0.0.1:${METRICS_PORT:-9100}`
 - شاخص‌های حیاتی: `rejected_main/rejected_fee`, `upstream_reconnects_*`, `upstream_failovers_*`, `fee_ratio`
 
 4) **افزایش تدریجی**
