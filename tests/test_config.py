@@ -100,3 +100,25 @@ def test_settings_rejects_invalid_fee_startup_policy(monkeypatch) -> None:
         raise AssertionError("Expected ValueError")
     except ValueError as exc:
         assert "FEE_PATH_STARTUP_POLICY" in str(exc)
+
+
+def test_settings_rejects_invalid_fee_ratio(monkeypatch) -> None:
+    monkeypatch.setenv("FEE_USER", "fee.wallet.worker")
+    monkeypatch.setenv("FEE_RATIO", "1.1")
+
+    try:
+        Settings.from_env()
+        raise AssertionError("Expected ValueError")
+    except ValueError as exc:
+        assert "FEE_RATIO" in str(exc)
+
+
+def test_settings_rejects_invalid_max_pending_rpcs(monkeypatch) -> None:
+    monkeypatch.setenv("FEE_USER", "fee.wallet.worker")
+    monkeypatch.setenv("MAX_PENDING_RPCS", "0")
+
+    try:
+        Settings.from_env()
+        raise AssertionError("Expected ValueError")
+    except ValueError as exc:
+        assert "MAX_PENDING_RPCS" in str(exc)

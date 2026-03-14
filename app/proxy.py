@@ -212,6 +212,7 @@ class MinerProxy:
         self.metrics = metrics
         self._session_slots = asyncio.Semaphore(cfg.max_sessions)
         self._global_tracker = RatioTracker()
+        self._global_controller = FeeController(cfg.fee_ratio)
         self._global_tracker_lock = asyncio.Lock()
 
 
@@ -220,7 +221,7 @@ class MinerProxy:
             return controller.select_path(session_tracker)
 
         async with self._global_tracker_lock:
-            return controller.select_path(self._global_tracker)
+            return self._global_controller.select_path(self._global_tracker)
 
     async def _record_accepted(self, route: str, difficulty: float, session_tracker: RatioTracker) -> None:
         session_tracker.record_accepted(route, difficulty)

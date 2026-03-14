@@ -47,6 +47,7 @@ cp .env.example .env
 - `METRICS_BIND_HOST` (پیش‌فرض `127.0.0.1`) برای محدودکردن exposure متریک
 - `V2RAYA_UI_BIND_HOST` و `V2RAYA_UI_PORT` برای محدودکردن دسترسی پنل v2rayA
 - `V2RAYA_IMAGE` و `GOST_IMAGE` برای pin/کنترل نسخه imageها
+- `APP_VERSION` و `FEE_PROXY_IMAGE` برای tag/image نسخه‌دار سرویس `fee-proxy` در Compose
 - `DOCKER_LOG_MAX_SIZE` و `DOCKER_LOG_MAX_FILE` برای log rotation کانتینرها
 - `MAIN_USER` لازم نیست (main user از `mining.authorize` ورودی خوانده می‌شود)
 - در ماینر، اکانت اصلی کاربر را همان‌طور که هست قرار بده
