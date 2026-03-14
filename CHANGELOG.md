@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.4
+- Add Docker log rotation settings (`json-file` with `DOCKER_LOG_MAX_SIZE` / `DOCKER_LOG_MAX_FILE`) for all Compose services.
+- Document production monitoring/log-handling guidance (structured logs + metrics collection) in README.
+
+## 0.4.3
+- Add GitHub Actions release workflow triggered by SemVer tags (`vX.Y.Z`) with version consistency check against `VERSION` and automatic GitHub Release publication.
+- Document step-by-step release process in README to move project from source-deploy toward packaged release maturity.
+
+## 0.4.2
+- Add tracked `deploy/v2raya` directory (with usage notes) so Compose volume mount target exists in the repository by default.
+- Document v2rayA volume-path prerequisite and persistence behavior in README.
+
+## 0.4.1
+- Fix fee-proxy Compose healthcheck to respect `METRICS_PORT` env value instead of hardcoded `9100`.
+- Clarify README metrics endpoint examples to use `${METRICS_PORT:-9100}`.
+
+## 0.4.0
+- Add dedicated fee upstream configuration (`FEE_UPSTREAM_HOST`, `FEE_UPSTREAM_PRIMARY_PORT`, `FEE_UPSTREAM_SECONDARY_PORT`) so fee traffic can target a different pool/domain than main.
+- Make fee-proxy published ports configurable in Compose via `LISTEN_PORT` and `METRICS_PORT` env values.
+- Update docs/examples/tests to cover the new fee-upstream and configurable fee-port behavior.
+
 ## 0.3.5
 - Make `simple-forwarder` active by default in Compose so port `60046` is always a pure forwarding path and never enters fee logic.
 - Update README to explicitly state that `60046` stays outside fee-aware proxy logic.

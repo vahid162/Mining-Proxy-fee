@@ -15,6 +15,11 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
 
   fee-proxy:
     build:
@@ -28,14 +33,19 @@ services:
     env_file:
       - .env
     ports:
-      - "40040:40040"
-      - "9100:9100"
+      - "${LISTEN_PORT:-40040}:${LISTEN_PORT:-40040}"
+      - "${METRICS_PORT:-9100}:${METRICS_PORT:-9100}"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9100', timeout=2).read()"]
+      test: ["CMD-SHELL", "python -c 'import os, urllib.request; urllib.request.urlopen(\"http://127.0.0.1:%s\" % os.getenv(\"METRICS_PORT\", \"9100\"), timeout=2).read()'"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
 
   simple-forwarder:
     image: ginuerzh/gost:latest
@@ -49,3 +59,8 @@ services:
       - -F=socks5://v2raya:20170
     ports:
       - "${FORWARDER_LISTEN_PORT:-60046}:${FORWARDER_LISTEN_PORT:-60046}"
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
