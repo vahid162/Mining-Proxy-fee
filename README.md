@@ -41,6 +41,9 @@ cp .env.example .env
 - `UPSTREAM_HOST/UPSTREAM_PRIMARY_PORT/UPSTREAM_SECONDARY_PORT` برای مسیر main
 - `FEE_UPSTREAM_HOST/FEE_UPSTREAM_PRIMARY_PORT/FEE_UPSTREAM_SECONDARY_PORT` برای مسیر fee (در صورت نیاز به pool/domain جدا)
 - `LISTEN_PORT` و `METRICS_PORT` برای پورت‌های fee-proxy
+- `METRICS_BIND_HOST` (پیش‌فرض `127.0.0.1`) برای محدودکردن exposure متریک
+- `V2RAYA_UI_BIND_HOST` و `V2RAYA_UI_PORT` برای محدودکردن دسترسی پنل v2rayA
+- `V2RAYA_IMAGE` و `GOST_IMAGE` برای pin/کنترل نسخه imageها
 - `DOCKER_LOG_MAX_SIZE` و `DOCKER_LOG_MAX_FILE` برای log rotation کانتینرها
 - `MAIN_USER` لازم نیست (main user از `mining.authorize` ورودی خوانده می‌شود)
 - در ماینر، اکانت اصلی کاربر را همان‌طور که هست قرار بده
@@ -83,6 +86,12 @@ docker compose up -d
 - قبل از production، با canary rollout شروع کن.
 - اگر reject rate بالا رفت، سریع rollback کن (مسیر قبلی forwarding ساده).
 - نسبت fee بر پایه difficulty-weighted accepted work محاسبه می‌شود (دقیق‌تر از count خام).
+
+## Hardening Checklist (الان یا بعداً؟)
+1. **Pin image tagها**: قابل پیاده‌سازی است و الان با env انجام شده (`V2RAYA_IMAGE`, `GOST_IMAGE`). پیشنهاد: ابتدا روی staging تست کن، بعد روی نسخهٔ پایدار pin کن.
+2. **پورت‌های env-driven**: برای fee-proxy انجام شده (`LISTEN_PORT`, `METRICS_PORT`) و برای پنل v2rayA هم env-driven شد (`V2RAYA_UI_PORT`).
+3. **محدود کردن exposure پورت‌های 2017 و 9100**: الان به‌صورت پیش‌فرض localhost-only شده (`V2RAYA_UI_BIND_HOST=127.0.0.1`, `METRICS_BIND_HOST=127.0.0.1`).
+4. **Canary + مسیر rollback**: باید عملیاتی اجرا شود (توسط اپراتور). مسیر `60046` برای rollback نگه داشته شده و runbook canary در همین README موجود است.
 
 ## Monitoring و Log Handling (برای Production)
 - لاگ‌ها JSON ساختاریافته هستند و روی stdout نوشته می‌شوند (برای جمع‌آوری توسط Loki/ELK/Fluent Bit مناسب‌اند).

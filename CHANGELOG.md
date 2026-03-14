@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.5
+- Make image references configurable via env (`V2RAYA_IMAGE`, `GOST_IMAGE`) to support controlled version pinning.
+- Reduce default exposure by binding v2rayA UI and metrics ports to localhost (`V2RAYA_UI_BIND_HOST`, `METRICS_BIND_HOST`).
+- Document a practical hardening checklist (pinning, env-driven ports, exposure limits, canary/rollback responsibility).
+
 ## 0.4.4
 - Add Docker log rotation settings (`json-file` with `DOCKER_LOG_MAX_SIZE` / `DOCKER_LOG_MAX_FILE`) for all Compose services.
 - Document production monitoring/log-handling guidance (structured logs + metrics collection) in README.
