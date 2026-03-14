@@ -130,7 +130,12 @@ class UpstreamSession:
         self.writer: asyncio.StreamWriter | None = None
         self.pending: dict[Any, asyncio.Future[StratumMessage]] = {}
         self.pending_slots = asyncio.Semaphore(cfg.max_pending_rpcs)
-        self._ports = [self.cfg.upstream_primary_port, self.cfg.upstream_secondary_port]
+        if self.label == "fee":
+            self._host = self.cfg.fee_upstream_host
+            self._ports = [self.cfg.fee_upstream_primary_port, self.cfg.fee_upstream_secondary_port]
+        else:
+            self._host = self.cfg.upstream_host
+            self._ports = [self.cfg.upstream_primary_port, self.cfg.upstream_secondary_port]
         self._active_port_index = 0
         self.connected_port: int | None = None
 
@@ -143,7 +148,7 @@ class UpstreamSession:
                 self.reader, self.writer = await open_socks5_connection(
                     self.cfg.socks5_host,
                     self.cfg.socks5_port,
-                    self.cfg.upstream_host,
+                    self._host,
                     port,
                 )
                 self._active_port_index = index
