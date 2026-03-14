@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.7
+- Add a public CI workflow (`.github/workflows/ci.yml`) for `pytest` on push/pull_request.
+- Add a CI check for `docker compose config` (with `.env.example` copied to `.env`) to validate Compose syntax in PRs.
+
 ## 0.4.6
 - Make `simple-forwarder` upstream host configurable via new `FORWARDER_UPSTREAM_HOST` env in Compose and `.env.example` (host is no longer hardcoded).
 - Keep fee-proxy ports and healthcheck fully env-driven (`LISTEN_PORT`, `METRICS_PORT`) and align docs with runtime behavior.

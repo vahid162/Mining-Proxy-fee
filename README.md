@@ -121,6 +121,10 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 python -m pytest -q
 ```
 
+## CI عمومی
+- روی `push` به `main` و همچنین `pull_request`، workflow عمومی `ci` اجرا می‌شود.
+- CI شامل دو چک است: `python -m pytest -q` و `docker compose config` (با `.env` ساخته‌شده از `.env.example`).
+
 ## Release و بسته‌بندی (Product Maturity)
 در وضعیت فعلی، پروژه قابل‌استفاده است ولی برای maturity بهتر باید **release رسمی** داشته باشد.
 
