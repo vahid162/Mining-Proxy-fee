@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.8
+- Fix outdated release command example in README to use current SemVer tag format aligned with latest documented version flow.
+
 ## 0.4.7
 - Add a public CI workflow (`.github/workflows/ci.yml`) for `pytest` on push/pull_request.
 - Add a CI check for `docker compose config` (with `.env.example` copied to `.env`) to validate Compose syntax in PRs.
