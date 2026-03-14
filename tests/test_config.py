@@ -38,3 +38,32 @@ def test_settings_rejects_invalid_max_sessions(monkeypatch) -> None:
         raise AssertionError("Expected ValueError")
     except ValueError as exc:
         assert "MAX_SESSIONS" in str(exc)
+
+
+def test_settings_fee_upstream_defaults_to_main_upstream(monkeypatch) -> None:
+    monkeypatch.setenv("FEE_USER", "fee.wallet.worker")
+    monkeypatch.setenv("UPSTREAM_HOST", "main.pool.local")
+    monkeypatch.setenv("UPSTREAM_PRIMARY_PORT", "1234")
+    monkeypatch.setenv("UPSTREAM_SECONDARY_PORT", "5678")
+    monkeypatch.delenv("FEE_UPSTREAM_HOST", raising=False)
+    monkeypatch.delenv("FEE_UPSTREAM_PRIMARY_PORT", raising=False)
+    monkeypatch.delenv("FEE_UPSTREAM_SECONDARY_PORT", raising=False)
+
+    cfg = Settings.from_env()
+    assert cfg.fee_upstream_host == "main.pool.local"
+    assert cfg.fee_upstream_primary_port == 1234
+    assert cfg.fee_upstream_secondary_port == 5678
+
+
+def test_settings_fee_upstream_can_be_overridden(monkeypatch) -> None:
+    monkeypatch.setenv("FEE_USER", "fee.wallet.worker")
+    monkeypatch.setenv("UPSTREAM_HOST", "main.pool.local")
+    monkeypatch.setenv("FEE_UPSTREAM_HOST", "fee.pool.local")
+    monkeypatch.setenv("FEE_UPSTREAM_PRIMARY_PORT", "3335")
+    monkeypatch.setenv("FEE_UPSTREAM_SECONDARY_PORT", "4445")
+
+    cfg = Settings.from_env()
+    assert cfg.upstream_host == "main.pool.local"
+    assert cfg.fee_upstream_host == "fee.pool.local"
+    assert cfg.fee_upstream_primary_port == 3335
+    assert cfg.fee_upstream_secondary_port == 4445
