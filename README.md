@@ -3,12 +3,12 @@
 پروژه `Mining-Proxy-fee` یک **Stratum-aware mining proxy** به زبان Python است که برای سناریوی fee-routing طراحی شده است.
 
 ## ویژگی‌ها
-- دریافت اتصال ماینر روی پورت `40040`
-- اتصال outbound به ViaBTC از طریق SOCKS5 (`v2rayA`)
+- دریافت اتصال ماینر روی پورت قابل تنظیم `LISTEN_PORT` (پیش‌فرض `40040`)
+- اتصال outbound به ViaBTC از طریق SOCKS5 (`v2rayA`) برای مسیر main و fee
 - حفظ اکانت اصلی از خود ماینر (دیگر `MAIN_USER` سراسری ندارد)
 - مسیر fee با اکانت جدا (`FEE_USER`)
 - کنترل نسبت fee با هدف پیش‌فرض `5%` بر مبنای accepted difficulty/work
-- failover پویا بین پورت‌های `3333` و `443`
+- failover پویا بین پورت‌های primary/secondary برای main و fee (با امکان upstream جدا برای fee)
 - endpoint متریک/سلامت روی `9100`
 - جداسازی پورت fee (`40040`) از پورت forwarding ساده (`60046`) در Compose
 - اجرای کامل با Docker Compose
@@ -16,8 +16,8 @@
 ## معماری
 
 ```text
-(پورت feeدار 40040)
-Miner -> fee-proxy (Python, Stratum-aware) -> v2rayA SOCKS5 -> ViaBTC
+(پورت feeدار قابل تنظیم با LISTEN_PORT)
+Miner -> fee-proxy (Python, Stratum-aware) -> v2rayA SOCKS5 -> ViaBTC(main/fee upstream configurable)
 
 (پورت forwarding ساده 60046 - همیشه جدا از fee-proxy)
 Miner -> simple-forwarder(gost) -> v2rayA SOCKS5 -> ViaBTC
@@ -37,6 +37,10 @@ cp .env.example .env
 
 2) مقادیر مهم را در `.env` تنظیم کن:
 - `FEE_USER` (اکانت fee)
+- `FEE_RATIO` (نسبت fee مثل `0.05` یا `0.1`)
+- `UPSTREAM_HOST/UPSTREAM_PRIMARY_PORT/UPSTREAM_SECONDARY_PORT` برای مسیر main
+- `FEE_UPSTREAM_HOST/FEE_UPSTREAM_PRIMARY_PORT/FEE_UPSTREAM_SECONDARY_PORT` برای مسیر fee (در صورت نیاز به pool/domain جدا)
+- `LISTEN_PORT` و `METRICS_PORT` برای پورت‌های fee-proxy
 - `MAIN_USER` لازم نیست (main user از `mining.authorize` ورودی خوانده می‌شود)
 - در ماینر، اکانت اصلی کاربر را همان‌طور که هست قرار بده
 
@@ -102,7 +106,7 @@ python -m pytest -q
 - ابتدا فقط سرویس fee-proxy را بالا بیاور: `docker compose up -d --build fee-proxy`
 
 2) **شروع با درصد کم ماینرها**
-- فقط 5% تا 10% ماینرها را موقتاً به پورت `40040` بفرست.
+- فقط 5% تا 10% ماینرها را موقتاً به پورت fee (پیش‌فرض `40040` یا مقدار `LISTEN_PORT`) بفرست.
 - بقیه ماینرها روی مسیر قبلی یا `60046` (forwarding ساده) بمانند.
 
 3) **پایش 15 تا 30 دقیقه‌ای**
