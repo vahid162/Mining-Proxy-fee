@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3
+- Add GitHub Actions release workflow triggered by SemVer tags (`vX.Y.Z`) with version consistency check against `VERSION` and automatic GitHub Release publication.
+- Document step-by-step release process in README to move project from source-deploy toward packaged release maturity.
+
 ## 0.4.2
 - Add tracked `deploy/v2raya` directory (with usage notes) so Compose volume mount target exists in the repository by default.
 - Document v2rayA volume-path prerequisite and persistence behavior in README.

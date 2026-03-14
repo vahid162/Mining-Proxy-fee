@@ -98,6 +98,23 @@ docker compose up -d
 python -m pytest -q
 ```
 
+## Release و بسته‌بندی (Product Maturity)
+در وضعیت فعلی، پروژه قابل‌استفاده است ولی برای maturity بهتر باید **release رسمی** داشته باشد.
+
+در این ریپو، مسیر release استاندارد به این شکل است:
+1. نسخه را در `VERSION` و `CHANGELOG.md` آپدیت کن.
+2. روی شاخه اصلی merge کن.
+3. یک Git tag از جنس `vX.Y.Z` بساز و push کن.
+4. GitHub Actions به‌صورت خودکار تست را اجرا می‌کند و GitHub Release منتشر می‌کند.
+
+نمونه دستورات:
+```bash
+git tag v0.4.3
+git push origin v0.4.3
+```
+
+> نکته: اگر release در GitHub دیده نمی‌شود، یعنی هنوز tag/release رسمی publish نشده است.
+
 ## نسخه
 نسخه فعلی در فایل `VERSION` نگهداری می‌شود.
 
