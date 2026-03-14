@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.1
+- Fix fee-proxy Compose healthcheck to respect `METRICS_PORT` env value instead of hardcoded `9100`.
+- Clarify README metrics endpoint examples to use `${METRICS_PORT:-9100}`.
+
+## 0.4.0
+- Add dedicated fee upstream configuration (`FEE_UPSTREAM_HOST`, `FEE_UPSTREAM_PRIMARY_PORT`, `FEE_UPSTREAM_SECONDARY_PORT`) so fee traffic can target a different pool/domain than main.
+- Make fee-proxy published ports configurable in Compose via `LISTEN_PORT` and `METRICS_PORT` env values.
+- Update docs/examples/tests to cover the new fee-upstream and configurable fee-port behavior.
+
 ## 0.3.5
 - Make `simple-forwarder` active by default in Compose so port `60046` is always a pure forwarding path and never enters fee logic.
 - Update README to explicitly state that `60046` stays outside fee-aware proxy logic.
