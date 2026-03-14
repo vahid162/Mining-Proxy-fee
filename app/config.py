@@ -50,6 +50,8 @@ class Settings:
     reconnect_max_backoff_seconds: float = 30.0
     reconnect_attempts: int = 0
     max_pending_rpcs: int = 256
+    fee_ratio_scope: str = "global"
+    fee_path_startup_policy: str = "strict"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -78,6 +80,8 @@ class Settings:
             reconnect_max_backoff_seconds=_env_float("RECONNECT_MAX_BACKOFF_SECONDS", 30.0),
             reconnect_attempts=_env_int("RECONNECT_ATTEMPTS", 0),
             max_pending_rpcs=_env_int("MAX_PENDING_RPCS", 256),
+            fee_ratio_scope=os.getenv("FEE_RATIO_SCOPE", "global"),
+            fee_path_startup_policy=os.getenv("FEE_PATH_STARTUP_POLICY", "strict"),
         )
         if not (0 < cfg.fee_ratio < 1):
             raise ValueError("FEE_RATIO must be between 0 and 1")
@@ -99,4 +103,8 @@ class Settings:
             raise ValueError("RECONNECT_ATTEMPTS must be >= 0")
         if cfg.max_pending_rpcs < 1:
             raise ValueError("MAX_PENDING_RPCS must be >= 1")
+        if cfg.fee_ratio_scope not in {"global", "session"}:
+            raise ValueError("FEE_RATIO_SCOPE must be one of: global, session")
+        if cfg.fee_path_startup_policy not in {"strict", "best_effort"}:
+            raise ValueError("FEE_PATH_STARTUP_POLICY must be one of: strict, best_effort")
         return cfg

@@ -7,7 +7,7 @@
 - اتصال outbound به ViaBTC از طریق SOCKS5 (`v2rayA`) برای مسیر main و fee
 - حفظ اکانت اصلی از خود ماینر (دیگر `MAIN_USER` سراسری ندارد)
 - مسیر fee با اکانت جدا (`FEE_USER`)
-- کنترل نسبت fee با هدف پیش‌فرض `5%` بر مبنای accepted difficulty/work
+- کنترل نسبت fee با هدف پیش‌فرض `5%` بر مبنای accepted difficulty/work (قابل تنظیم در سطح `global` یا `session`)
 - failover پویا بین پورت‌های primary/secondary برای main و fee (با امکان upstream جدا برای fee)
 - endpoint متریک/سلامت روی `METRICS_PORT` (پیش‌فرض `9100`)
 - جداسازی پورت fee (`40040`) از پورت forwarding ساده (`60046`) در Compose
@@ -38,6 +38,8 @@ cp .env.example .env
 2) مقادیر مهم را در `.env` تنظیم کن:
 - `FEE_USER` (اکانت fee)
 - `FEE_RATIO` (نسبت fee مثل `0.05` یا `0.1`)
+- `FEE_RATIO_SCOPE` (`global` یا `session`، پیش‌فرض `global`)
+- `FEE_PATH_STARTUP_POLICY` (`strict` یا `best_effort`، پیش‌فرض `strict`)
 - `UPSTREAM_HOST/UPSTREAM_PRIMARY_PORT/UPSTREAM_SECONDARY_PORT` برای مسیر main
 - `FEE_UPSTREAM_HOST/FEE_UPSTREAM_PRIMARY_PORT/FEE_UPSTREAM_SECONDARY_PORT` برای مسیر fee (در صورت نیاز به pool/domain جدا)
 - `LISTEN_PORT` و `METRICS_PORT` برای پورت‌های fee-proxy
@@ -87,6 +89,7 @@ docker compose up -d
 - قبل از production، با canary rollout شروع کن.
 - اگر reject rate بالا رفت، سریع rollback کن (مسیر قبلی forwarding ساده).
 - نسبت fee بر پایه difficulty-weighted accepted work محاسبه می‌شود (دقیق‌تر از count خام).
+- در حالت `FEE_PATH_STARTUP_POLICY=strict` اگر subscribe/authorize مسیر fee خطا بدهد، session fail-fast می‌شود تا drift پنهان رخ ندهد.
 
 ## Hardening Checklist (الان یا بعداً؟)
 1. **Pin image tagها**: قابل پیاده‌سازی است و الان با env انجام شده (`V2RAYA_IMAGE`, `GOST_IMAGE`). پیشنهاد: ابتدا روی staging تست کن، بعد روی نسخهٔ پایدار pin کن.
