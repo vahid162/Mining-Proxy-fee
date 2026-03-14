@@ -139,8 +139,8 @@ python -m pytest -q
 
 نمونه دستورات:
 ```bash
-git tag v0.4.7
-git push origin v0.4.7
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 > نکته: اگر release در GitHub دیده نمی‌شود، یعنی هنوز tag/release رسمی publish نشده است.
