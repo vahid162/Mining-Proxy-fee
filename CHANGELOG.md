@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.9
+- Fix release command example in README to use generic `vX.Y.Z` tags, preventing future version drift in docs.
+
 ## 0.4.8
 - Fix outdated release command example in README to use current SemVer tag format aligned with latest documented version flow.
 
