@@ -176,6 +176,9 @@ async def setup_system(close_primary_on_submit: bool = False):
         upstream_host="127.0.0.1",
         upstream_primary_port=primary_port,
         upstream_secondary_port=secondary_port,
+        fee_upstream_host="127.0.0.1",
+        fee_upstream_primary_port=primary_port,
+        fee_upstream_secondary_port=secondary_port,
         fee_user="fee.wallet.worker",
         fee_password="x",
         fee_ratio=0.05,
@@ -281,6 +284,9 @@ async def integration_failover_reconnect() -> None:
             upstream_host="127.0.0.1",
             upstream_primary_port=system["primary_server"].sockets[0].getsockname()[1],
             upstream_secondary_port=system["secondary_server"].sockets[0].getsockname()[1],
+            fee_upstream_host="127.0.0.1",
+            fee_upstream_primary_port=system["primary_server"].sockets[0].getsockname()[1],
+            fee_upstream_secondary_port=system["secondary_server"].sockets[0].getsockname()[1],
             fee_user="fee.wallet.worker",
             reconnect_initial_backoff_seconds=0.05,
             reconnect_max_backoff_seconds=0.2,
@@ -314,3 +320,25 @@ def test_integration_happy_path_dual_upstream_and_difficulty() -> None:
 
 def test_integration_runtime_failover_and_reconnect() -> None:
     asyncio.run(integration_failover_reconnect())
+
+
+def test_upstream_session_uses_fee_specific_upstream() -> None:
+    from app.proxy import UpstreamSession
+
+    cfg = Settings(
+        fee_user="fee.wallet.worker",
+        upstream_host="main.pool.local",
+        upstream_primary_port=1001,
+        upstream_secondary_port=1002,
+        fee_upstream_host="fee.pool.local",
+        fee_upstream_primary_port=2001,
+        fee_upstream_secondary_port=2002,
+    )
+
+    main_session = UpstreamSession(cfg, "main")
+    fee_session = UpstreamSession(cfg, "fee")
+
+    assert main_session._host == "main.pool.local"
+    assert main_session._ports == [1001, 1002]
+    assert fee_session._host == "fee.pool.local"
+    assert fee_session._ports == [2001, 2002]
