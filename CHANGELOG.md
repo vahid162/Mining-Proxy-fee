@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.2
+- Add tracked `deploy/v2raya` directory (with usage notes) so Compose volume mount target exists in the repository by default.
+- Document v2rayA volume-path prerequisite and persistence behavior in README.
+
 ## 0.4.1
 - Fix fee-proxy Compose healthcheck to respect `METRICS_PORT` env value instead of hardcoded `9100`.
 - Clarify README metrics endpoint examples to use `${METRICS_PORT:-9100}`.

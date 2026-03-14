@@ -83,6 +83,15 @@ docker compose up -d
 - اگر reject rate بالا رفت، سریع rollback کن (مسیر قبلی forwarding ساده).
 - نسبت fee بر پایه difficulty-weighted accepted work محاسبه می‌شود (دقیق‌تر از count خام).
 
+## پیش‌نیاز مسیر volume برای v2rayA
+چون در Compose این mount وجود دارد:
+
+```yaml
+./deploy/v2raya:/etc/v2raya
+```
+
+لازم است مسیر `deploy/v2raya` داخل ریپو وجود داشته باشد. این مسیر در پروژه اضافه شده است و state/config مربوط به v2rayA را روی host نگه می‌دارد (برای persistence).
+
 ## توسعه محلی و تست
 
 ```bash
