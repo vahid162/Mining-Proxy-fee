@@ -33,5 +33,8 @@ jobs:
       - name: Prepare env file
         run: cp .env.example .env
 
-      - name: Validate docker compose file
-        run: docker compose config
+      - name: Validate operator compose file
+        run: docker compose -f compose.yaml config
+
+      - name: Validate development compose overlay
+        run: docker compose -f compose.yaml -f compose.dev.yaml config

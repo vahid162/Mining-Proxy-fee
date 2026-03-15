@@ -27,7 +27,7 @@ Miner -> simple-forwarder(gost) -> v2rayA SOCKS5 -> ViaBTC
 - Docker
 - Docker Compose Plugin (`docker compose`)
 
-## راه‌اندازی سریع
+## Quick Start (اپراتور - بدون build)
 
 1) فایل env بساز:
 
@@ -55,7 +55,8 @@ cp .env.example .env
 3) استک را بالا بیاور:
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 پورت forwarding ساده (`60046`) هم به‌صورت پیش‌فرض با استک بالا می‌آید و وارد منطق fee نمی‌شود.
@@ -76,6 +77,21 @@ docker compose logs -f fee-proxy
 
 ```bash
 curl http://127.0.0.1:${METRICS_PORT:-9100}
+```
+
+
+## Development (build از سورس)
+
+برای توسعه محلی و بیلد از سورس، فایل override توسعه را هم اضافه کن:
+
+```bash
+docker compose -f compose.yaml -f compose.dev.yaml up -d --build
+```
+
+برای توقف:
+
+```bash
+docker compose -f compose.yaml -f compose.dev.yaml down
 ```
 
 ## توقف / راه‌اندازی مجدد
@@ -119,7 +135,7 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 
 لازم است مسیر `deploy/v2raya` داخل ریپو وجود داشته باشد. این مسیر در پروژه اضافه شده است و state/config مربوط به v2rayA را روی host نگه می‌دارد (برای persistence).
 
-## توسعه محلی و تست
+## تست خودکار (کد)
 
 ```bash
 python -m pytest -q
@@ -127,7 +143,7 @@ python -m pytest -q
 
 ## CI عمومی
 - روی `push` به `main` و همچنین `pull_request`، workflow عمومی `ci` اجرا می‌شود.
-- CI شامل دو چک است: `python -m pytest -q` و `docker compose config` (با `.env` ساخته‌شده از `.env.example`).
+- CI شامل سه چک است: `python -m pytest -q`، `docker compose -f compose.yaml config` و `docker compose -f compose.yaml -f compose.dev.yaml config` (با `.env` ساخته‌شده از `.env.example`).
 
 ## Release و بسته‌بندی (Product Maturity)
 در وضعیت فعلی، پروژه قابل‌استفاده است ولی برای maturity بهتر باید **release رسمی** داشته باشد.
@@ -160,7 +176,7 @@ git push origin vX.Y.Z
 ## Canary Rollout (قدم‌به‌قدم)
 1) **آماده‌سازی**
 - از `.env` بکاپ بگیر و مطمئن شو `FEE_USER` درست تنظیم شده.
-- ابتدا فقط سرویس fee-proxy را بالا بیاور: `docker compose up -d --build fee-proxy`
+- ابتدا فقط سرویس fee-proxy را بالا بیاور: `docker compose pull && docker compose up -d fee-proxy`
 
 2) **شروع با درصد کم ماینرها**
 - فقط 5% تا 10% ماینرها را موقتاً به پورت fee (پیش‌فرض `40040` یا مقدار `LISTEN_PORT`) بفرست.
