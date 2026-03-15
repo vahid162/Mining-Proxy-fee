@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.12
+- Clarify canonical Compose naming in README (`compose.yaml` + `compose.dev.yaml`) and explicitly state that `docker-compose.yml` is not the official path.
+- Make operator commands in README explicitly target `compose.yaml` and add guidance to tag exactly the same version as `VERSION`.
+
 ## 0.7.11
 - Enforce canonical Compose naming by validating `compose.yaml` and `compose.dev.yaml` existence in CI and release workflows.
 - Keep release readiness aligned with README by adding explicit pre-checks that prevent automation drift if compose files are renamed or removed.
