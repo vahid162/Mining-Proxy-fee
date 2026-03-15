@@ -46,6 +46,11 @@ jobs:
             exit 1
           fi
 
+      - name: Validate canonical compose files exist
+        run: |
+          test -f compose.yaml
+          test -f compose.dev.yaml
+
       - name: Prepare env file for compose validation
         run: cp .env.example .env
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.11
+- Enforce canonical Compose naming by validating `compose.yaml` and `compose.dev.yaml` existence in CI and release workflows.
+- Keep release readiness aligned with README by adding explicit pre-checks that prevent automation drift if compose files are renamed or removed.
+
 ## 0.7.10
 - Unify test dependency installation across CI and release workflows by using a shared `requirements-test.txt` file.
 - Keep release workflow resilient for future test dependency growth by installing from the shared requirements file before running pytest.
