@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.6
+- Align README with `.env.example` by adding a complete environment-variable reference grouped by runtime, routing, fee control, reliability, and image/logging settings.
+- Finalize operator quick-start wording around release-bundle consumption and `docker compose pull` + `docker compose up -d` flow.
+- Harden Docker image runtime by switching container execution to a non-root user (`appuser`).
+
 ## 0.7.5
 - Update README Quick Start to the final operator flow: download release bundle, configure `.env`, then run `docker compose pull` + `docker compose up -d`.
 - Remove build-from-source commands from the main operator path and mark local build as developer-only guidance.

@@ -10,13 +10,15 @@
 ## Quick Start (اپراتور نهایی)
 1) از صفحه Release، فایل `release-bundle.tar.gz` را دانلود و extract کن.
 
-2) فایل `.env` را از روی نمونه بساز و متغیرهای ضروری را تنظیم کن:
+2) فایل `.env` را از روی نمونه بساز:
 
 ```bash
 cp .env.example .env
 ```
 
-3) استک را با image آماده بالا بیاور:
+3) متغیرهای ضروری را تنظیم کن (بخش Minimal config پایین).
+
+4) استک را با image آماده بالا بیاور:
 
 ```bash
 docker compose pull
@@ -41,6 +43,34 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 اختیاری (در صورت نیاز):
 - `FORWARDER_UPSTREAM_HOST`, `FORWARDER_UPSTREAM_PORT`
 - `LISTEN_PORT`, `METRICS_PORT`
+
+## Environment variables (مطابق کامل `.env.example`)
+### Runtime / Network
+- `LISTEN_HOST`, `LISTEN_PORT`
+- `SOCKS5_HOST`, `SOCKS5_PORT`
+- `METRICS_HOST`, `METRICS_PORT`, `METRICS_BIND_HOST`
+
+### Upstream routing
+- `UPSTREAM_HOST`, `UPSTREAM_PRIMARY_PORT`, `UPSTREAM_SECONDARY_PORT`
+- `FEE_UPSTREAM_HOST`, `FEE_UPSTREAM_PRIMARY_PORT`, `FEE_UPSTREAM_SECONDARY_PORT`
+- `FORWARDER_LISTEN_PORT`, `FORWARDER_UPSTREAM_HOST`, `FORWARDER_UPSTREAM_PORT`
+
+### Auth / Fee control
+- `MAIN_PASSWORD`
+- `FEE_USER`, `FEE_PASSWORD`
+- `FEE_RATIO`, `FEE_RATIO_SCOPE`, `FEE_PATH_STARTUP_POLICY`
+
+### Reliability / Limits
+- `MAX_SESSIONS`
+- `RPC_TIMEOUT_SECONDS`, `UPSTREAM_READ_TIMEOUT_SECONDS`, `WRITE_TIMEOUT_SECONDS`
+- `RECONNECT_INITIAL_BACKOFF_SECONDS`, `RECONNECT_MAX_BACKOFF_SECONDS`, `RECONNECT_ATTEMPTS`
+- `MAX_PENDING_RPCS`
+
+### Images / UI / Logging
+- `APP_VERSION`, `FEE_PROXY_IMAGE`
+- `V2RAYA_IMAGE`, `GOST_IMAGE`
+- `V2RAYA_UI_BIND_HOST`, `V2RAYA_UI_PORT`
+- `DOCKER_LOG_MAX_SIZE`, `DOCKER_LOG_MAX_FILE`
 
 ## Upgrade path
 - مسیر ارتقا: `docs/UPGRADE.md`
