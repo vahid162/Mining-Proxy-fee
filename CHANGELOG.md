@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.7
+- Stabilize CI/release pytest execution by disabling third-party auto-loaded pytest plugins (`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`).
+- Pin pytest version in GitHub workflows (`pytest==8.3.3`) to reduce pull-request runner variance.
+- Keep the same test suite (`python -m pytest -q`) while making CI behavior deterministic.
+
 ## 0.7.6
 - Align README with `.env.example` by adding a complete environment-variable reference grouped by runtime, routing, fee control, reliability, and image/logging settings.
 - Finalize operator quick-start wording around release-bundle consumption and `docker compose pull` + `docker compose up -d` flow.
