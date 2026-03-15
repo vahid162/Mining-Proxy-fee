@@ -21,15 +21,15 @@ cp .env.example .env
 4) استک را با image آماده بالا بیاور:
 
 ```bash
-docker compose pull
-docker compose up -d
+docker compose -f compose.yaml pull
+docker compose -f compose.yaml up -d
 ```
 
 بررسی سریع:
 
 ```bash
-docker compose ps
-docker compose logs --tail=200 fee-proxy
+docker compose -f compose.yaml ps
+docker compose -f compose.yaml logs --tail=200 fee-proxy
 curl http://127.0.0.1:${METRICS_PORT:-9100}
 ```
 
@@ -84,6 +84,10 @@ git push origin vX.Y.Z
 ```
 
 > روی هر tag از جنس `vX.Y.Z`، workflow release به‌صورت خودکار CI را اجرا می‌کند، imageها را روی GHCR منتشر می‌کند، Release Notes را از `CHANGELOG.md` می‌سازد و GitHub Release را همراه assetهای اپراتوری منتشر می‌کند.
+
+> نام canonical فایل‌های Compose در این ریپو `compose.yaml` (اپراتوری) و `compose.dev.yaml` (development overlay) است و `docker-compose.yml` در مسیر رسمی پروژه استفاده نمی‌شود.
+
+> قبل از tag همیشه نسخه را از فایل `VERSION` بخوان و همان را tag کن (مثال: اگر `VERSION=0.7.11` است، tag باید `v0.7.11` باشد).
 
 ## نکته برای توسعه
 مسیر build-from-source فقط برای توسعه‌دهنده‌هاست و در راه‌اندازی اپراتوری استفاده نمی‌شود.
