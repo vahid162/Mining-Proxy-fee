@@ -22,10 +22,7 @@ services:
         max-file: "${DOCKER_LOG_MAX_FILE:-5}"
 
   fee-proxy:
-    image: ${FEE_PROXY_IMAGE:-mining-proxy-fee}:${APP_VERSION:-0.4.10}
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${FEE_PROXY_IMAGE:-mining-proxy-fee}:${APP_VERSION:-latest}
     container_name: fee-proxy
     restart: unless-stopped
     depends_on:
