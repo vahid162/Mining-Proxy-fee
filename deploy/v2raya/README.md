@@ -1,6 +1,6 @@
 # v2rayA data directory
 
-این پوشه به‌صورت volume در `docker-compose.yml` به مسیر `/etc/v2raya` داخل کانتینر mount می‌شود.
+این پوشه به‌صورت volume در `compose.yaml` به مسیر `/etc/v2raya` داخل کانتینر mount می‌شود.
 
 هدف:
 - نگه‌داری تنظیمات/state مربوط به v2rayA روی host
