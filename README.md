@@ -27,55 +27,53 @@ Miner -> simple-forwarder(gost) -> v2rayA SOCKS5 -> ViaBTC
 - Docker
 - Docker Compose Plugin (`docker compose`)
 
-## راه‌اندازی سریع
+## Quick Start (اپراتور - در ۳ دستور)
 
-1) فایل env بساز:
+> هدف این مسیر: بدون clone/build پیچیده، فقط با `.env` و Compose سرویس را بالا بیاوری.
+
+1) فایل env را بساز:
 
 ```bash
 cp .env.example .env
 ```
 
-2) مقادیر مهم را در `.env` تنظیم کن:
-- `FEE_USER` (اکانت fee)
-- `FEE_RATIO` (نسبت fee مثل `0.05` یا `0.1`)
-- `FEE_RATIO_SCOPE` (`global` یا `session`، پیش‌فرض `global`)
-- `FEE_PATH_STARTUP_POLICY` (`strict` یا `best_effort`، پیش‌فرض `strict`)
-- `UPSTREAM_HOST/UPSTREAM_PRIMARY_PORT/UPSTREAM_SECONDARY_PORT` برای مسیر main
-- `FEE_UPSTREAM_HOST/FEE_UPSTREAM_PRIMARY_PORT/FEE_UPSTREAM_SECONDARY_PORT` برای مسیر fee (در صورت نیاز به pool/domain جدا)
-- `LISTEN_PORT` و `METRICS_PORT` برای پورت‌های fee-proxy
-- `FORWARDER_UPSTREAM_HOST` و `FORWARDER_UPSTREAM_PORT` برای مقصد upstream در simple-forwarder
-- `METRICS_BIND_HOST` (پیش‌فرض `127.0.0.1`) برای محدودکردن exposure متریک
-- `V2RAYA_UI_BIND_HOST` و `V2RAYA_UI_PORT` برای محدودکردن دسترسی پنل v2rayA
-- `V2RAYA_IMAGE` و `GOST_IMAGE` برای pin/کنترل نسخه imageها
-- `APP_VERSION` و `FEE_PROXY_IMAGE` برای tag/image نسخه‌دار سرویس `fee-proxy` در Compose
-- `DOCKER_LOG_MAX_SIZE` و `DOCKER_LOG_MAX_FILE` برای log rotation کانتینرها
-- `MAIN_USER` لازم نیست (main user از `mining.authorize` ورودی خوانده می‌شود)
-- در ماینر، اکانت اصلی کاربر را همان‌طور که هست قرار بده
+2) فقط متغیرهای ضروری را در `.env` تنظیم کن (بقیه پیش‌فرض‌ها قابل‌قبول هستند):
+- `FEE_USER`
+- `FEE_RATIO`
+- `UPSTREAM_HOST`, `UPSTREAM_PRIMARY_PORT`, `UPSTREAM_SECONDARY_PORT`
+- `FEE_UPSTREAM_HOST`, `FEE_UPSTREAM_PRIMARY_PORT`, `FEE_UPSTREAM_SECONDARY_PORT`
+- در صورت نیاز: `FORWARDER_UPSTREAM_HOST`, `FORWARDER_UPSTREAM_PORT`
+- فقط اگر لازم بود: `LISTEN_PORT`, `METRICS_PORT`
 
 3) استک را بالا بیاور:
 
 ```bash
-docker compose up -d --build
+docker compose pull && docker compose up -d
+```
+
+بررسی سریع بعد از اجرا:
+
+```bash
+docker compose ps
+docker compose logs --tail=200 fee-proxy
+curl http://127.0.0.1:${METRICS_PORT:-9100}
 ```
 
 پورت forwarding ساده (`60046`) هم به‌صورت پیش‌فرض با استک بالا می‌آید و وارد منطق fee نمی‌شود.
 
-4) وضعیت سرویس‌ها:
+
+## Development (build از سورس)
+
+برای توسعه محلی و بیلد از سورس، فایل override توسعه را هم اضافه کن:
 
 ```bash
-docker compose ps
+docker compose -f compose.yaml -f compose.dev.yaml up -d --build
 ```
 
-5) لاگ زنده:
+برای توقف:
 
 ```bash
-docker compose logs -f fee-proxy
-```
-
-6) بررسی health/metrics:
-
-```bash
-curl http://127.0.0.1:${METRICS_PORT:-9100}
+docker compose -f compose.yaml -f compose.dev.yaml down
 ```
 
 ## توقف / راه‌اندازی مجدد
@@ -119,7 +117,7 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 
 لازم است مسیر `deploy/v2raya` داخل ریپو وجود داشته باشد. این مسیر در پروژه اضافه شده است و state/config مربوط به v2rayA را روی host نگه می‌دارد (برای persistence).
 
-## توسعه محلی و تست
+## تست خودکار (کد)
 
 ```bash
 python -m pytest -q
@@ -127,7 +125,7 @@ python -m pytest -q
 
 ## CI عمومی
 - روی `push` به `main` و همچنین `pull_request`، workflow عمومی `ci` اجرا می‌شود.
-- CI شامل دو چک است: `python -m pytest -q` و `docker compose config` (با `.env` ساخته‌شده از `.env.example`).
+- CI شامل سه چک است: `python -m pytest -q`، `docker compose -f compose.yaml config` و `docker compose -f compose.yaml -f compose.dev.yaml config` (با `.env` ساخته‌شده از `.env.example`).
 
 ## Release و بسته‌بندی (Product Maturity)
 در وضعیت فعلی، پروژه قابل‌استفاده است ولی برای maturity بهتر باید **release رسمی** داشته باشد.
@@ -136,7 +134,7 @@ python -m pytest -q
 1. نسخه را در `VERSION` و `CHANGELOG.md` آپدیت کن.
 2. روی شاخه اصلی merge کن.
 3. یک Git tag از جنس `vX.Y.Z` بساز و push کن.
-4. GitHub Actions به‌صورت خودکار تست را اجرا می‌کند و GitHub Release منتشر می‌کند.
+4. GitHub Actions به‌صورت خودکار تست را اجرا می‌کند، image را روی GHCR منتشر می‌کند و GitHub Release می‌سازد.
 
 نمونه دستورات:
 ```bash
@@ -144,7 +142,24 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-> نکته: اگر release در GitHub دیده نمی‌شود، یعنی هنوز tag/release رسمی publish نشده است.
+> نکته: در workflow release، روی هر tag از جنس `vX.Y.Z` دو image روی GHCR منتشر می‌شود: `ghcr.io/<owner>/mining-proxy-fee:vX.Y.Z` و `ghcr.io/<owner>/mining-proxy-fee:latest`.
+
+
+## Release Assets (بسته اپراتوری)
+در هر release (بر پایه tag `vX.Y.Z`) علاوه‌بر imageهای GHCR، این assetها هم attach می‌شوند:
+- `compose.yaml`
+- `.env.example`
+- `CHANGELOG.md`
+- `checksums.txt`
+- `release-bundle.tar.gz`
+
+محتوای `release-bundle.tar.gz`:
+- `compose.yaml`
+- `.env.example`
+- `UPGRADE.md`
+- `ROLLBACK.md`
+- `OPERATIONS.md`
+- `deploy/v2raya/README.md`
 
 ## نسخه
 نسخه فعلی در فایل `VERSION` نگهداری می‌شود.
@@ -160,7 +175,7 @@ git push origin vX.Y.Z
 ## Canary Rollout (قدم‌به‌قدم)
 1) **آماده‌سازی**
 - از `.env` بکاپ بگیر و مطمئن شو `FEE_USER` درست تنظیم شده.
-- ابتدا فقط سرویس fee-proxy را بالا بیاور: `docker compose up -d --build fee-proxy`
+- ابتدا فقط سرویس fee-proxy را بالا بیاور: `docker compose pull && docker compose up -d fee-proxy`
 
 2) **شروع با درصد کم ماینرها**
 - فقط 5% تا 10% ماینرها را موقتاً به پورت fee (پیش‌فرض `40040` یا مقدار `LISTEN_PORT`) بفرست.
