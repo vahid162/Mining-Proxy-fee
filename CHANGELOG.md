@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.7.2
+- Refactor README into operator-first sections: `What it is`, `Quick Start`, `Minimal config`, and `Upgrade path`.
+- Move operational detail to docs and formalize runbooks for operations/upgrade/rollback.
+- Add explicit operations guidance for health checks, logs, metrics, and `deploy/v2raya` backup.
+
+## 0.7.1
+- Simplify operator Quick Start to a 3-command flow (`cp .env.example .env`, edit required vars, `docker compose pull && docker compose up -d`).
+- Reduce Quick Start configuration focus to essential variables only (`FEE_USER`, `FEE_RATIO`, `UPSTREAM_*`, `FEE_UPSTREAM_*`, optional `FORWARDER_UPSTREAM_*` and ports).
+- Align `docs/OPERATIONS.md` with the same operator-first 3-command onboarding.
+
+## 0.7.0
+- Extend release workflow to attach operator assets (`compose.yaml`, `.env.example`, `CHANGELOG.md`, `checksums.txt`, `release-bundle.tar.gz`) on every tagged release.
+- Generate `checksums.txt` and build `release-bundle.tar.gz` automatically in CI before publishing GitHub Release.
+- Add operator runbooks (`docs/UPGRADE.md`, `docs/ROLLBACK.md`, `docs/OPERATIONS.md`) and include them in release bundle.
+
+## 0.6.0
+- Add GHCR publish pipeline in release workflow to build/push `ghcr.io/<owner>/mining-proxy-fee` on every SemVer tag with both `:vX.Y.Z` and `:latest` tags.
+- Keep GitHub Release creation in the same release workflow and include published image references in release notes.
+- Update `.env.example` and README so operator workflow points to GHCR-hosted `fee-proxy` images.
+
+## 0.5.0
+- Split deployment Compose into operator-first `compose.yaml` (pull/up) and development override `compose.dev.yaml` (build from source).
+- Switch default `APP_VERSION` in `.env.example` to `latest` so image tags default to latest as requested.
+- Update README and v2rayA volume docs to reflect Quick Start vs Development workflow and new compose filenames.
+
 ## 0.4.10
 - Add versioned `fee-proxy` image naming in Compose via `FEE_PROXY_IMAGE` + `APP_VERSION` and sync `.env.example`/README with runtime env variables.
 - Ensure global fee ratio mode uses shared controller + shared tracker path selection in proxy.
