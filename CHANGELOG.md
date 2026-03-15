@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.0
+- Split deployment Compose into operator-first `compose.yaml` (pull/up) and development override `compose.dev.yaml` (build from source).
+- Switch default `APP_VERSION` in `.env.example` to `latest` so image tags default to latest as requested.
+- Update README and v2rayA volume docs to reflect Quick Start vs Development workflow and new compose filenames.
+
 ## 0.4.10
 - Add versioned `fee-proxy` image naming in Compose via `FEE_PROXY_IMAGE` + `APP_VERSION` and sync `.env.example`/README with runtime env variables.
 - Ensure global fee ratio mode uses shared controller + shared tracker path selection in proxy.
