@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.4
+- Add a standard `LICENSE` file (MIT) for clear public-repo usage terms.
+- Add `.dockerignore` to reduce Docker build context size and avoid shipping non-runtime files.
+- Document license section in README while keeping operator-first docs structure.
+
 ## 0.7.3
 - Complete release pipeline by generating GitHub Release notes directly from the matching `CHANGELOG.md` section for the tagged version.
 - Keep GHCR image publish flow for both tags (`vX.Y.Z` and `latest`) and fail the release if changelog section extraction is missing.

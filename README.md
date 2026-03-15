@@ -66,3 +66,7 @@ docker compose -f compose.yaml -f compose.dev.yaml up -d --build
 ```bash
 python -m pytest -q
 ```
+
+
+## License
+This project is released under the MIT License.
