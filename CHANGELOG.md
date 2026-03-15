@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.8
+- Set `.env.example` default `FEE_PROXY_IMAGE` to the real GHCR path `ghcr.io/vahid162/mining-proxy-fee` for operator-ready out-of-the-box usage.
+
 ## 0.7.7
 - Stabilize CI/release pytest execution by disabling third-party auto-loaded pytest plugins (`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`).
 - Pin pytest version in GitHub workflows (`pytest==8.3.3`) to reduce pull-request runner variance.
