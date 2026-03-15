@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.11
+- Enforce canonical Compose naming by validating `compose.yaml` and `compose.dev.yaml` existence in CI and release workflows.
+- Keep release readiness aligned with README by adding explicit pre-checks that prevent automation drift if compose files are renamed or removed.
+
+## 0.7.10
+- Unify test dependency installation across CI and release workflows by using a shared `requirements-test.txt` file.
+- Keep release workflow resilient for future test dependency growth by installing from the shared requirements file before running pytest.
+
+## 0.7.9
+- Strengthen release workflow parity checks by validating that `.env.example` contains a concrete GHCR image reference (no `REPLACE_WITH_OWNER` placeholder).
+- Run `docker compose config` validation (`compose.yaml` and `compose.dev.yaml`) during tagged releases, matching the CI-level configuration checks.
+
 ## 0.7.8
 - Set `.env.example` default `FEE_PROXY_IMAGE` to the real GHCR path `ghcr.io/vahid162/mining-proxy-fee` for operator-ready out-of-the-box usage.
 

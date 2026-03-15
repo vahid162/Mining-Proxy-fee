@@ -23,7 +23,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install test dependencies
-        run: python -m pip install --upgrade pip pytest==8.3.3
+        run: python -m pip install --upgrade pip -r requirements-test.txt
 
       - name: Validate tag matches VERSION
         run: |
@@ -33,6 +33,32 @@ jobs:
             echo "Tag version ($TAG_VERSION) does not match VERSION ($FILE_VERSION)"
             exit 1
           fi
+
+      - name: Validate .env.example image reference
+        run: |
+          if grep -q 'REPLACE_WITH_OWNER' .env.example; then
+            echo "Found placeholder image reference in .env.example"
+            exit 1
+          fi
+
+          if ! grep -Eq '^FEE_PROXY_IMAGE=ghcr\.io/[^/]+/mining-proxy-fee$' .env.example; then
+            echo "FEE_PROXY_IMAGE must be a concrete ghcr.io/<owner>/mining-proxy-fee reference"
+            exit 1
+          fi
+
+      - name: Validate canonical compose files exist
+        run: |
+          test -f compose.yaml
+          test -f compose.dev.yaml
+
+      - name: Prepare env file for compose validation
+        run: cp .env.example .env
+
+      - name: Validate operator compose file
+        run: docker compose -f compose.yaml config
+
+      - name: Validate development compose overlay
+        run: docker compose -f compose.yaml -f compose.dev.yaml config
 
       - name: Run tests
         run: PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q
