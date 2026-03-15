@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.2
+- Refactor README into operator-first sections: `What it is`, `Quick Start`, `Minimal config`, and `Upgrade path`.
+- Move operational detail to docs and formalize runbooks for operations/upgrade/rollback.
+- Add explicit operations guidance for health checks, logs, metrics, and `deploy/v2raya` backup.
+
 ## 0.7.1
 - Simplify operator Quick Start to a 3-command flow (`cp .env.example .env`, edit required vars, `docker compose pull && docker compose up -d`).
 - Reduce Quick Start configuration focus to essential variables only (`FEE_USER`, `FEE_RATIO`, `UPSTREAM_*`, `FEE_UPSTREAM_*`, optional `FORWARDER_UPSTREAM_*` and ports).
