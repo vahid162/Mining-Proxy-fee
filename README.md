@@ -162,6 +162,23 @@ git push origin vX.Y.Z
 
 > نکته: در workflow release، روی هر tag از جنس `vX.Y.Z` دو image روی GHCR منتشر می‌شود: `ghcr.io/<owner>/mining-proxy-fee:vX.Y.Z` و `ghcr.io/<owner>/mining-proxy-fee:latest`.
 
+
+## Release Assets (بسته اپراتوری)
+در هر release (بر پایه tag `vX.Y.Z`) علاوه‌بر imageهای GHCR، این assetها هم attach می‌شوند:
+- `compose.yaml`
+- `.env.example`
+- `CHANGELOG.md`
+- `checksums.txt`
+- `release-bundle.tar.gz`
+
+محتوای `release-bundle.tar.gz`:
+- `compose.yaml`
+- `.env.example`
+- `UPGRADE.md`
+- `ROLLBACK.md`
+- `OPERATIONS.md`
+- `deploy/v2raya/README.md`
+
 ## نسخه
 نسخه فعلی در فایل `VERSION` نگهداری می‌شود.
 

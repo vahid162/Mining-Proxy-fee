@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0
+- Extend release workflow to attach operator assets (`compose.yaml`, `.env.example`, `CHANGELOG.md`, `checksums.txt`, `release-bundle.tar.gz`) on every tagged release.
+- Generate `checksums.txt` and build `release-bundle.tar.gz` automatically in CI before publishing GitHub Release.
+- Add operator runbooks (`docs/UPGRADE.md`, `docs/ROLLBACK.md`, `docs/OPERATIONS.md`) and include them in release bundle.
+
 ## 0.6.0
 - Add GHCR publish pipeline in release workflow to build/push `ghcr.io/<owner>/mining-proxy-fee` on every SemVer tag with both `:vX.Y.Z` and `:latest` tags.
 - Keep GitHub Release creation in the same release workflow and include published image references in release notes.

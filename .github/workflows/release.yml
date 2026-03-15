@@ -65,6 +65,22 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
+      - name: Build release bundle and checksums
+        run: |
+          mkdir -p dist/release-bundle
+          cp compose.yaml dist/release-bundle/
+          cp .env.example dist/release-bundle/
+          cp docs/UPGRADE.md docs/ROLLBACK.md docs/OPERATIONS.md dist/release-bundle/
+          mkdir -p dist/release-bundle/deploy/v2raya
+          cp deploy/v2raya/README.md dist/release-bundle/deploy/v2raya/
+
+          tar -czf release-bundle.tar.gz -C dist/release-bundle .
+
+          sha256sum compose.yaml > checksums.txt
+          sha256sum .env.example >> checksums.txt
+          sha256sum CHANGELOG.md >> checksums.txt
+          sha256sum release-bundle.tar.gz >> checksums.txt
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -76,4 +92,15 @@ jobs:
             - ghcr.io/${{ github.repository_owner }}/mining-proxy-fee:${{ github.ref_name }}
             - ghcr.io/${{ github.repository_owner }}/mining-proxy-fee:latest
 
-            See CHANGELOG.md for details.
+            Operator assets attached to this release:
+            - compose.yaml
+            - .env.example
+            - CHANGELOG.md
+            - checksums.txt
+            - release-bundle.tar.gz
+          files: |
+            compose.yaml
+            .env.example
+            CHANGELOG.md
+            checksums.txt
+            release-bundle.tar.gz
