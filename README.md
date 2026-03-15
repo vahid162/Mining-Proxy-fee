@@ -7,19 +7,20 @@
 - مسیر forwarding ساده روی پورت `60046` (بدون ورود به منطق fee) برای fallback/rollback عملیاتی.
 - استقرار اپراتوری با Docker Compose و مصرف image آماده از GHCR.
 
-## Quick Start (۳ دستور اپراتوری)
-1) فایل env را بساز:
+## Quick Start (اپراتور نهایی)
+1) از صفحه Release، فایل `release-bundle.tar.gz` را دانلود و extract کن.
+
+2) فایل `.env` را از روی نمونه بساز و متغیرهای ضروری را تنظیم کن:
 
 ```bash
 cp .env.example .env
 ```
 
-2) متغیرهای ضروری را در `.env` تنظیم کن.
-
-3) استک را بالا بیاور:
+3) استک را با image آماده بالا بیاور:
 
 ```bash
-docker compose pull && docker compose up -d
+docker compose pull
+docker compose up -d
 ```
 
 بررسی سریع:
@@ -54,19 +55,8 @@ git push origin vX.Y.Z
 
 > روی هر tag از جنس `vX.Y.Z`، workflow release به‌صورت خودکار CI را اجرا می‌کند، imageها را روی GHCR منتشر می‌کند، Release Notes را از `CHANGELOG.md` می‌سازد و GitHub Release را همراه assetهای اپراتوری منتشر می‌کند.
 
-## Development (build از سورس)
-برای توسعه محلی:
-
-```bash
-docker compose -f compose.yaml -f compose.dev.yaml up -d --build
-```
-
-تست کد:
-
-```bash
-python -m pytest -q
-```
-
+## نکته برای توسعه
+مسیر build-from-source فقط برای توسعه‌دهنده‌هاست و در راه‌اندازی اپراتوری استفاده نمی‌شود.
 
 ## License
 This project is released under the MIT License.

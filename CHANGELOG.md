@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.5
+- Update README Quick Start to the final operator flow: download release bundle, configure `.env`, then run `docker compose pull` + `docker compose up -d`.
+- Remove build-from-source commands from the main operator path and mark local build as developer-only guidance.
+- Keep operator docs aligned with artifact-based deployment expectations.
+
 ## 0.7.4
 - Add a standard `LICENSE` file (MIT) for clear public-repo usage terms.
 - Add `.dockerignore` to reduce Docker build context size and avoid shipping non-runtime files.
