@@ -2,12 +2,11 @@
 
 این سند چک‌لیست روزانه اپراتوری را خلاصه می‌کند.
 
-## راه‌اندازی اپراتوری
+## راه‌اندازی اپراتوری (۳ دستور)
 ```bash
 cp .env.example .env
-# ویرایش .env
-docker compose pull
-docker compose up -d
+# فقط این متغیرها را تنظیم کن: FEE_USER, FEE_RATIO, UPSTREAM_*, FEE_UPSTREAM_*
+docker compose pull && docker compose up -d
 ```
 
 ## پایش سریع

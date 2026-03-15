@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1
+- Simplify operator Quick Start to a 3-command flow (`cp .env.example .env`, edit required vars, `docker compose pull && docker compose up -d`).
+- Reduce Quick Start configuration focus to essential variables only (`FEE_USER`, `FEE_RATIO`, `UPSTREAM_*`, `FEE_UPSTREAM_*`, optional `FORWARDER_UPSTREAM_*` and ports).
+- Align `docs/OPERATIONS.md` with the same operator-first 3-command onboarding.
+
 ## 0.7.0
 - Extend release workflow to attach operator assets (`compose.yaml`, `.env.example`, `CHANGELOG.md`, `checksums.txt`, `release-bundle.tar.gz`) on every tagged release.
 - Generate `checksums.txt` and build `release-bundle.tar.gz` automatically in CI before publishing GitHub Release.

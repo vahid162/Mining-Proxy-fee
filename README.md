@@ -27,56 +27,53 @@ Miner -> simple-forwarder(gost) -> v2rayA SOCKS5 -> ViaBTC
 - Docker
 - Docker Compose Plugin (`docker compose`)
 
-## Quick Start (اپراتور - بدون build)
+## Quick Start (اپراتور - در ۳ دستور)
 
-1) فایل env بساز:
+> هدف این مسیر: بدون clone/build پیچیده، فقط با `.env` و Compose سرویس را بالا بیاوری.
+
+1) فایل env را بساز:
 
 ```bash
 cp .env.example .env
 ```
 
-2) مقادیر مهم را در `.env` تنظیم کن:
-- `FEE_USER` (اکانت fee)
-- `FEE_RATIO` (نسبت fee مثل `0.05` یا `0.1`)
-- `FEE_RATIO_SCOPE` (`global` یا `session`، پیش‌فرض `global`)
-- `FEE_PATH_STARTUP_POLICY` (`strict` یا `best_effort`، پیش‌فرض `strict`)
-- `UPSTREAM_HOST/UPSTREAM_PRIMARY_PORT/UPSTREAM_SECONDARY_PORT` برای مسیر main
-- `FEE_UPSTREAM_HOST/FEE_UPSTREAM_PRIMARY_PORT/FEE_UPSTREAM_SECONDARY_PORT` برای مسیر fee (در صورت نیاز به pool/domain جدا)
-- `LISTEN_PORT` و `METRICS_PORT` برای پورت‌های fee-proxy
-- `FORWARDER_UPSTREAM_HOST` و `FORWARDER_UPSTREAM_PORT` برای مقصد upstream در simple-forwarder
-- `METRICS_BIND_HOST` (پیش‌فرض `127.0.0.1`) برای محدودکردن exposure متریک
-- `V2RAYA_UI_BIND_HOST` و `V2RAYA_UI_PORT` برای محدودکردن دسترسی پنل v2rayA
-- `V2RAYA_IMAGE` و `GOST_IMAGE` برای pin/کنترل نسخه imageها
-- `APP_VERSION` و `FEE_PROXY_IMAGE` برای tag/image نسخه‌دار سرویس `fee-proxy` در Compose (برای اپراتور، `FEE_PROXY_IMAGE` را روی مسیر GHCR خودت بگذار)
-- `DOCKER_LOG_MAX_SIZE` و `DOCKER_LOG_MAX_FILE` برای log rotation کانتینرها
-- `MAIN_USER` لازم نیست (main user از `mining.authorize` ورودی خوانده می‌شود)
-- در ماینر، اکانت اصلی کاربر را همان‌طور که هست قرار بده
+2) فقط متغیرهای ضروری را در `.env` تنظیم کن (بقیه پیش‌فرض‌ها قابل‌قبول هستند):
+- `FEE_USER`
+- `FEE_RATIO`
+- `UPSTREAM_HOST`, `UPSTREAM_PRIMARY_PORT`, `UPSTREAM_SECONDARY_PORT`
+- `FEE_UPSTREAM_HOST`, `FEE_UPSTREAM_PRIMARY_PORT`, `FEE_UPSTREAM_SECONDARY_PORT`
+- در صورت نیاز: `FORWARDER_UPSTREAM_HOST`, `FORWARDER_UPSTREAM_PORT`
+- فقط اگر لازم بود: `LISTEN_PORT`, `METRICS_PORT`
 
 3) استک را بالا بیاور:
 
 ```bash
-docker compose pull
-docker compose up -d
+docker compose pull && docker compose up -d
+```
+
+بررسی سریع بعد از اجرا:
+
+```bash
+docker compose ps
+docker compose logs --tail=200 fee-proxy
+curl http://127.0.0.1:${METRICS_PORT:-9100}
 ```
 
 پورت forwarding ساده (`60046`) هم به‌صورت پیش‌فرض با استک بالا می‌آید و وارد منطق fee نمی‌شود.
 
-4) وضعیت سرویس‌ها:
+
+## Development (build از سورس)
+
+برای توسعه محلی و بیلد از سورس، فایل override توسعه را هم اضافه کن:
 
 ```bash
-docker compose ps
+docker compose -f compose.yaml -f compose.dev.yaml up -d --build
 ```
 
-5) لاگ زنده:
+برای توقف:
 
 ```bash
-docker compose logs -f fee-proxy
-```
-
-6) بررسی health/metrics:
-
-```bash
-curl http://127.0.0.1:${METRICS_PORT:-9100}
+docker compose -f compose.yaml -f compose.dev.yaml down
 ```
 
 
