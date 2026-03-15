@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.9
+- Strengthen release workflow parity checks by validating that `.env.example` contains a concrete GHCR image reference (no `REPLACE_WITH_OWNER` placeholder).
+- Run `docker compose config` validation (`compose.yaml` and `compose.dev.yaml`) during tagged releases, matching the CI-level configuration checks.
+
 ## 0.7.8
 - Set `.env.example` default `FEE_PROXY_IMAGE` to the real GHCR path `ghcr.io/vahid162/mining-proxy-fee` for operator-ready out-of-the-box usage.
 
