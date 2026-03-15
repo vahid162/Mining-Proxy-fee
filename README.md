@@ -85,7 +85,7 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 cat VERSION
 
 # 2) مطمئن شو CHANGELOG.md برای همین نسخه یک سکشن "## X.Y.Z" دارد
-# (اگر نسخه 0.7.13 است، باید "## 0.7.13" وجود داشته باشد)
+# (اگر نسخه X.Y.Z است، باید "## X.Y.Z" وجود داشته باشد)
 
 # 3) چک‌های محلی pipeline را اجرا کن
 cp .env.example .env
@@ -105,7 +105,7 @@ git push origin vX.Y.Z
 
 > نام canonical فایل‌های Compose در این ریپو `compose.yaml` (اپراتوری) و `compose.dev.yaml` (development overlay) است و `docker-compose.yml` در مسیر رسمی پروژه استفاده نمی‌شود.
 
-> قبل از tag همیشه نسخه را از فایل `VERSION` بخوان و همان را tag کن (مثال: اگر `VERSION=0.7.11` است، tag باید `v0.7.11` باشد).
+> قبل از tag همیشه نسخه را از فایل `VERSION` بخوان و همان را tag کن (مثال: اگر `VERSION=X.Y.Z` است، tag باید `vX.Y.Z` باشد).
 
 ## نکته برای توسعه
 مسیر build-from-source فقط برای توسعه‌دهنده‌هاست و در راه‌اندازی اپراتوری استفاده نمی‌شود.

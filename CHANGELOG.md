@@ -7,6 +7,8 @@
 ## 0.7.12
 - Clarify canonical Compose naming in README (`compose.yaml` + `compose.dev.yaml`) and explicitly state that `docker-compose.yml` is not the official path.
 - Make operator commands in README explicitly target `compose.yaml` and add guidance to tag exactly the same version as `VERSION`.
+- Add a release pre-flight checklist in README (VERSION check, matching `CHANGELOG.md` section, pytest, and compose validations) before creating `vX.Y.Z` tags.
+- Clarify that release starts only after pushing the tag to GitHub because workflow trigger is configured on `push.tags`.
 
 ## 0.7.11
 - Enforce canonical Compose naming by validating `compose.yaml` and `compose.dev.yaml` existence in CI and release workflows.
