@@ -76,6 +76,21 @@ docker compose -f compose.yaml -f compose.dev.yaml up -d --build
 docker compose -f compose.yaml -f compose.dev.yaml down
 ```
 
+
+## Development (build از سورس)
+
+برای توسعه محلی و بیلد از سورس، فایل override توسعه را هم اضافه کن:
+
+```bash
+docker compose -f compose.yaml -f compose.dev.yaml up -d --build
+```
+
+برای توقف:
+
+```bash
+docker compose -f compose.yaml -f compose.dev.yaml down
+```
+
 ## توقف / راه‌اندازی مجدد
 
 ```bash
