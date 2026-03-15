@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.3
+- Complete release pipeline by generating GitHub Release notes directly from the matching `CHANGELOG.md` section for the tagged version.
+- Keep GHCR image publish flow for both tags (`vX.Y.Z` and `latest`) and fail the release if changelog section extraction is missing.
+- Preserve and attach operator release assets (`compose.yaml`, `.env.example`, `CHANGELOG.md`, `checksums.txt`, `release-bundle.tar.gz`) with checksums.
+
 ## 0.7.2
 - Refactor README into operator-first sections: `What it is`, `Quick Start`, `Minimal config`, and `Upgrade path`.
 - Move operational detail to docs and formalize runbooks for operations/upgrade/rollback.

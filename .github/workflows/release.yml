@@ -81,23 +81,40 @@ jobs:
           sha256sum CHANGELOG.md >> checksums.txt
           sha256sum release-bundle.tar.gz >> checksums.txt
 
+      - name: Build release notes from CHANGELOG
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+          {
+            echo "## ${GITHUB_REF_NAME}"
+            echo
+            awk -v ver="$TAG_VERSION" '
+              $0 == "## " ver {flag=1; next}
+              flag && /^## / {exit}
+              flag {print}
+            ' CHANGELOG.md
+            echo
+            echo "### Docker images"
+            echo "- ghcr.io/${GITHUB_REPOSITORY_OWNER}/mining-proxy-fee:${GITHUB_REF_NAME}"
+            echo "- ghcr.io/${GITHUB_REPOSITORY_OWNER}/mining-proxy-fee:latest"
+            echo
+            echo "### Assets"
+            echo "- compose.yaml"
+            echo "- .env.example"
+            echo "- CHANGELOG.md"
+            echo "- checksums.txt"
+            echo "- release-bundle.tar.gz"
+          } > RELEASE_NOTES.md
+
+          if ! grep -q '^-' RELEASE_NOTES.md; then
+            echo "Failed to extract changelog notes for version ${TAG_VERSION}"
+            exit 1
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
-          body: |
-            Automated release for version ${{ github.ref_name }}.
-
-            Docker images published:
-            - ghcr.io/${{ github.repository_owner }}/mining-proxy-fee:${{ github.ref_name }}
-            - ghcr.io/${{ github.repository_owner }}/mining-proxy-fee:latest
-
-            Operator assets attached to this release:
-            - compose.yaml
-            - .env.example
-            - CHANGELOG.md
-            - checksums.txt
-            - release-bundle.tar.gz
+          body_path: RELEASE_NOTES.md
           files: |
             compose.yaml
             .env.example

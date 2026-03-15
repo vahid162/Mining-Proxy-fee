@@ -52,7 +52,7 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-> روی هر tag از جنس `vX.Y.Z`، workflow release به‌صورت خودکار imageها را روی GHCR منتشر می‌کند و GitHub Release را همراه assetهای اپراتوری می‌سازد.
+> روی هر tag از جنس `vX.Y.Z`، workflow release به‌صورت خودکار CI را اجرا می‌کند، imageها را روی GHCR منتشر می‌کند، Release Notes را از `CHANGELOG.md` می‌سازد و GitHub Release را همراه assetهای اپراتوری منتشر می‌کند.
 
 ## Development (build از سورس)
 برای توسعه محلی:
