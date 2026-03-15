@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.13
+- Add a release pre-flight checklist in README (VERSION check, CHANGELOG section check, pytest, and compose validations) to reduce tagged-release failures before pushing `vX.Y.Z`.
+- Clarify that release starts only after pushing the tag because GitHub Actions trigger is configured on `push.tags`, and Git does not push tags by default.
+
 ## 0.7.12
 - Clarify canonical Compose naming in README (`compose.yaml` + `compose.dev.yaml`) and explicitly state that `docker-compose.yml` is not the official path.
 - Make operator commands in README explicitly target `compose.yaml` and add guidance to tag exactly the same version as `VERSION`.
