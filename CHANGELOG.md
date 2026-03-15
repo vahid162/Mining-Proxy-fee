@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.0
+- Add GHCR publish pipeline in release workflow to build/push `ghcr.io/<owner>/mining-proxy-fee` on every SemVer tag with both `:vX.Y.Z` and `:latest` tags.
+- Keep GitHub Release creation in the same release workflow and include published image references in release notes.
+- Update `.env.example` and README so operator workflow points to GHCR-hosted `fee-proxy` images.
+
 ## 0.5.0
 - Split deployment Compose into operator-first `compose.yaml` (pull/up) and development override `compose.dev.yaml` (build from source).
 - Switch default `APP_VERSION` in `.env.example` to `latest` so image tags default to latest as requested.

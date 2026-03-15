@@ -47,7 +47,7 @@ cp .env.example .env
 - `METRICS_BIND_HOST` (پیش‌فرض `127.0.0.1`) برای محدودکردن exposure متریک
 - `V2RAYA_UI_BIND_HOST` و `V2RAYA_UI_PORT` برای محدودکردن دسترسی پنل v2rayA
 - `V2RAYA_IMAGE` و `GOST_IMAGE` برای pin/کنترل نسخه imageها
-- `APP_VERSION` و `FEE_PROXY_IMAGE` برای tag/image نسخه‌دار سرویس `fee-proxy` در Compose
+- `APP_VERSION` و `FEE_PROXY_IMAGE` برای tag/image نسخه‌دار سرویس `fee-proxy` در Compose (برای اپراتور، `FEE_PROXY_IMAGE` را روی مسیر GHCR خودت بگذار)
 - `DOCKER_LOG_MAX_SIZE` و `DOCKER_LOG_MAX_FILE` برای log rotation کانتینرها
 - `MAIN_USER` لازم نیست (main user از `mining.authorize` ورودی خوانده می‌شود)
 - در ماینر، اکانت اصلی کاربر را همان‌طور که هست قرار بده
@@ -152,7 +152,7 @@ python -m pytest -q
 1. نسخه را در `VERSION` و `CHANGELOG.md` آپدیت کن.
 2. روی شاخه اصلی merge کن.
 3. یک Git tag از جنس `vX.Y.Z` بساز و push کن.
-4. GitHub Actions به‌صورت خودکار تست را اجرا می‌کند و GitHub Release منتشر می‌کند.
+4. GitHub Actions به‌صورت خودکار تست را اجرا می‌کند، image را روی GHCR منتشر می‌کند و GitHub Release می‌سازد.
 
 نمونه دستورات:
 ```bash
@@ -160,7 +160,7 @@ git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-> نکته: اگر release در GitHub دیده نمی‌شود، یعنی هنوز tag/release رسمی publish نشده است.
+> نکته: در workflow release، روی هر tag از جنس `vX.Y.Z` دو image روی GHCR منتشر می‌شود: `ghcr.io/<owner>/mining-proxy-fee:vX.Y.Z` و `ghcr.io/<owner>/mining-proxy-fee:latest`.
 
 ## نسخه
 نسخه فعلی در فایل `VERSION` نگهداری می‌شود.
