@@ -78,16 +78,34 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 - عملیات روزانه (health/logs/metrics/backup): `docs/OPERATIONS.md`
 
 برای انتشار نسخه جدید:
+1) قبل از ساخت tag این تمیزکاری کوتاه را انجام بده تا release pipeline به‌خاطر ناهماهنگی‌ها fail نشود:
+
+```bash
+# 1) نسخه جاری را چک کن
+cat VERSION
+
+# 2) مطمئن شو CHANGELOG.md برای همین نسخه یک سکشن "## X.Y.Z" دارد
+# (اگر نسخه X.Y.Z است، باید "## X.Y.Z" وجود داشته باشد)
+
+# 3) چک‌های محلی pipeline را اجرا کن
+cp .env.example .env
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q
+docker compose -f compose.yaml config
+docker compose -f compose.yaml -f compose.dev.yaml config
+```
+
+2) tag را دقیقاً برابر VERSION بساز و جداگانه روی GitHub push کن:
+
 ```bash
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
-> روی هر tag از جنس `vX.Y.Z`، workflow release به‌صورت خودکار CI را اجرا می‌کند، imageها را روی GHCR منتشر می‌کند، Release Notes را از `CHANGELOG.md` می‌سازد و GitHub Release را همراه assetهای اپراتوری منتشر می‌کند.
+> روی هر tag از جنس `vX.Y.Z`، workflow release به‌صورت خودکار CI را اجرا می‌کند، imageها را روی GHCR منتشر می‌کند، Release Notes را از `CHANGELOG.md` می‌سازد و GitHub Release را همراه assetهای اپراتوری منتشر می‌کند. چون trigger روی `push.tags` تنظیم شده، تا وقتی `git push origin vX.Y.Z` انجام نشود release واقعی شروع نمی‌شود.
 
 > نام canonical فایل‌های Compose در این ریپو `compose.yaml` (اپراتوری) و `compose.dev.yaml` (development overlay) است و `docker-compose.yml` در مسیر رسمی پروژه استفاده نمی‌شود.
 
-> قبل از tag همیشه نسخه را از فایل `VERSION` بخوان و همان را tag کن (مثال: اگر `VERSION=0.7.11` است، tag باید `v0.7.11` باشد).
+> قبل از tag همیشه نسخه را از فایل `VERSION` بخوان و همان را tag کن (مثال: اگر `VERSION=X.Y.Z` است، tag باید `vX.Y.Z` باشد).
 
 ## نکته برای توسعه
 مسیر build-from-source فقط برای توسعه‌دهنده‌هاست و در راه‌اندازی اپراتوری استفاده نمی‌شود.
