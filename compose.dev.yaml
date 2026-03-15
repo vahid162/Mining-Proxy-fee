@@ -1,0 +1,6 @@
+services:
+  fee-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${FEE_PROXY_IMAGE:-mining-proxy-fee}:${APP_VERSION:-latest}
