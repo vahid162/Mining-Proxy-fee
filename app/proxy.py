@@ -111,6 +111,7 @@ class MinerSessionState:
     job_difficulty: dict[str, float] = field(default_factory=dict)
     current_difficulty: float = 1.0
     awaiting_post_difficulty_job: bool = False
+    awaiting_post_extranonce_job: bool = False
     last_invalidation_cause: str = "-"
     subscribe_raw: dict[str, Any] | None = None
     subscribe_result: Any = None
@@ -244,6 +245,11 @@ class MinerProxy:
         session.last_invalidation_cause = reason
         self._log_session(session, "job_generation_bumped", generation=session.job_generation, reason=reason)
 
+    def _invalidate_downstream_jobs(self, session: MinerSessionState, reason: str) -> None:
+        self._bump_job_generation(session, reason)
+        session.awaiting_post_difficulty_job = False
+        session.awaiting_post_extranonce_job = False
+
     def _should_fail_on_fee_startup_error(self) -> bool:
         return self.cfg.fee_path_startup_policy == "strict"
 
@@ -357,7 +363,7 @@ class MinerProxy:
             if upstream.reader is None:
                 if not await upstream.reconnect_with_backoff():
                     raise RuntimeError("upstream_permanently_down")
-                self._bump_job_generation(session, "stale_due_to_reconnect")
+                self._invalidate_downstream_jobs(session, "stale_due_to_reconnect")
                 await self._resync_after_reconnect(upstream, session)
 
                 async with self.metrics.lock:
@@ -378,7 +384,7 @@ class MinerProxy:
                 self._log_session(session, "upstream_read_error", err=exc, old_port=old_port)
                 if not await upstream.reconnect_with_backoff():
                     raise RuntimeError("upstream_permanently_down") from exc
-                self._bump_job_generation(session, "stale_due_to_reconnect")
+                self._invalidate_downstream_jobs(session, "stale_due_to_reconnect")
                 await self._resync_after_reconnect(upstream, session)
                 async with self.metrics.lock:
                     self.metrics.upstream_reconnects_main += 1
@@ -403,17 +409,40 @@ class MinerProxy:
             diff = extract_set_difficulty(message)
             if diff is not None:
                 session.current_difficulty = diff
-                session.awaiting_post_difficulty_job = True
-                self._bump_job_generation(session, "stale_due_to_difficulty_epoch")
+                if not session.awaiting_post_difficulty_job:
+                    session.awaiting_post_difficulty_job = True
+                    self._log_session(
+                        session,
+                        "difficulty_epoch_pending",
+                        next_difficulty=round(diff, 6),
+                    )
 
             if message.method == "mining.notify":
                 job_id = extract_job_id(message)
                 clean_jobs = self._extract_notify_clean_jobs(message)
                 if clean_jobs:
                     self._bump_job_generation(session, "stale_due_to_clean_jobs")
+
                 if session.awaiting_post_difficulty_job:
+                    self._bump_job_generation(session, "stale_due_to_difficulty_epoch")
                     session.awaiting_post_difficulty_job = False
-                    self._log_session(session, "difficulty_epoch_ready", generation=session.job_generation, job_id=job_id or "-")
+                    self._log_session(
+                        session,
+                        "difficulty_epoch_committed",
+                        generation=session.job_generation,
+                        job_id=job_id or "-",
+                    )
+
+                if session.awaiting_post_extranonce_job:
+                    self._bump_job_generation(session, "stale_due_to_extranonce_reset")
+                    session.awaiting_post_extranonce_job = False
+                    self._log_session(
+                        session,
+                        "extranonce_reset_committed",
+                        generation=session.job_generation,
+                        job_id=job_id or "-",
+                    )
+
                 target = await self._select_path(controller, tracker)
                 session.active_label = target
                 difficulty = session.current_difficulty
@@ -432,8 +461,9 @@ class MinerProxy:
                 continue
 
             if message.method == "mining.set_extranonce":
-                self._bump_job_generation(session, "stale_due_to_extranonce_reset")
-                session.awaiting_post_difficulty_job = False
+                if not session.awaiting_post_extranonce_job:
+                    session.awaiting_post_extranonce_job = True
+                    self._log_session(session, "extranonce_reset_pending")
                 await self._safe_miner_write(miner_writer, line)
                 continue
 
@@ -504,7 +534,7 @@ class MinerProxy:
                     session.miner_password = msg.params[1]
 
                 if session.main_authorized or session.fee_authorized or session.job_records:
-                    self._bump_job_generation(session, "stale_due_to_reauthorize")
+                    self._invalidate_downstream_jobs(session, "stale_due_to_reauthorize")
 
                 if not session.miner_user:
                     raise RuntimeError("miner username is required before authorize")

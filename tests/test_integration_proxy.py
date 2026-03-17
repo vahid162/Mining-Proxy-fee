@@ -169,6 +169,7 @@ async def setup_system(
     submit_success: bool = True,
     submit_error: list | None = None,
     fee_ratio: float = 0.5,
+    upstream_read_timeout_seconds: float = 0.3,
 ) -> dict:
     pool = FakePool(authorize_fee_success=authorize_fee_success, submit_success=submit_success, submit_error=submit_error)
     pool_server = await asyncio.start_server(pool.handle, "127.0.0.1", 0)
@@ -189,7 +190,7 @@ async def setup_system(
         fee_password="x",
         fee_ratio=fee_ratio,
         rpc_timeout_seconds=2.0,
-        upstream_read_timeout_seconds=0.3,
+        upstream_read_timeout_seconds=upstream_read_timeout_seconds,
         write_timeout_seconds=2.0,
         reconnect_initial_backoff_seconds=0.05,
         reconnect_max_backoff_seconds=0.2,
@@ -308,6 +309,76 @@ async def integration_old_generation_submit_is_rejected_locally() -> None:
         await writer.wait_closed()
     finally:
         await shutdown_system(system)
+
+
+
+async def integration_set_difficulty_is_deferred_until_next_notify() -> None:
+    system = await setup_system(fee_ratio=1.0)
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await system["pool"].broadcast_notify("job-before-diff", clean_jobs=False)
+        old_notify = await read_until_method(reader, "mining.notify")
+
+        await system["pool"].broadcast_difficulty(16.0)
+        _ = await read_until_method(reader, "mining.set_difficulty")
+
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", old_notify["params"][0], "aa", "bb", "cc"]})
+        still_valid = await read_msg(reader)
+        assert still_valid["result"] is True
+        assert len(system["pool"].submits) == 1
+
+        await system["pool"].broadcast_notify("job-after-diff", clean_jobs=False)
+        _ = await read_until_method(reader, "mining.notify")
+
+        await send_msg(writer, {"id": 4, "method": "mining.submit", "params": ["ignored", old_notify["params"][0], "aa", "bb", "cc"]})
+        stale = await read_msg(reader)
+        assert stale["result"] is False
+        assert len(system["pool"].submits) == 1
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
+
+
+async def integration_set_extranonce_is_deferred_until_next_notify() -> None:
+    system = await setup_system(fee_ratio=1.0)
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await system["pool"].broadcast_notify("job-before-extranonce-deferred", clean_jobs=False)
+        old_notify = await read_until_method(reader, "mining.notify")
+
+        await system["pool"].broadcast_extranonce("ee", 4)
+        _ = await read_until_method(reader, "mining.set_extranonce")
+
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", old_notify["params"][0], "aa", "bb", "cc"]})
+        still_valid = await read_msg(reader)
+        assert still_valid["result"] is True
+        assert len(system["pool"].submits) == 1
+
+        await system["pool"].broadcast_notify("job-after-extranonce-deferred", clean_jobs=False)
+        _ = await read_until_method(reader, "mining.notify")
+
+        await send_msg(writer, {"id": 4, "method": "mining.submit", "params": ["ignored", old_notify["params"][0], "aa", "bb", "cc"]})
+        stale = await read_msg(reader)
+        assert stale["result"] is False
+        assert len(system["pool"].submits) == 1
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
+
 
 async def integration_single_upstream_dual_authorize_and_routing() -> None:
     system = await setup_system()
@@ -558,3 +629,11 @@ def test_integration_old_generation_submit_is_rejected_after_extranonce_reset() 
 
 def test_integration_old_generation_submit_is_rejected_after_reauthorize() -> None:
     asyncio.run(integration_old_generation_submit_is_rejected_after_reauthorize())
+
+
+def test_integration_set_difficulty_is_deferred_until_next_notify() -> None:
+    asyncio.run(integration_set_difficulty_is_deferred_until_next_notify())
+
+
+def test_integration_set_extranonce_is_deferred_until_next_notify() -> None:
+    asyncio.run(integration_set_extranonce_is_deferred_until_next_notify())

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.26
+- Defer job-generation invalidation for `mining.set_difficulty` and `mining.set_extranonce` until the next `mining.notify`, with explicit pending/committed epoch logs.
+- Keep immediate invalidation on `clean_jobs=true` and reconnect/failover boundaries, while preserving local stale/unknown submit rejection.
+- Add tests for deferred difficulty/extranonce invalidation behavior and reconnect invalidation safety helper coverage.
+
 ## 0.7.25
 - Strengthen downstream job-generation invalidation on upstream mining-state transitions: clean_jobs, set_difficulty epochs, set_extranonce resets, reconnect, and miner re-authorize boundaries.
 - Keep local stale/unknown submit rejection behavior and enrich generation-mismatch reject logs with explicit invalidation causes (e.g. `stale_due_to_clean_jobs`, `stale_due_to_reconnect`).
