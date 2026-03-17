@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.19
+- Fix `deploy/check-socks-reachability.sh` to pass `SOCKS5_HOST`/`SOCKS5_PORT` into `docker exec` explicitly, so operator-provided overrides are reliably honored.
+- Clarify README preflight helper wording for host/port override usage.
+
 ## 0.7.18
 - Clarify in README that `compose.v2raya-bridge.yaml` remains strictly opt-in and is not merged into canonical `compose.yaml` by default.
 - Explicitly document that the bridge overlay uses `depends_on: condition: service_healthy` (not `service_started`) to stay aligned with existing v2raya health-gated startup behavior.

@@ -117,7 +117,7 @@ docker compose -f compose.yaml -f compose.v2raya-bridge.yaml up -d
 docker exec fee-proxy python -c "import os,socket; h=os.getenv('SOCKS5_HOST','v2raya'); p=int(os.getenv('SOCKS5_PORT','22070')); s=socket.create_connection((h,p),5); s.close(); print(f'OK {h}:{p}')"
 ```
 
-یا از اسکریپت preflight سبک استفاده کن:
+یا از اسکریپت preflight سبک استفاده کن (با امکان override مستقیم host/port):
 
 ```bash
 SOCKS5_HOST=v2raya SOCKS5_PORT=22070 ./deploy/check-socks-reachability.sh
