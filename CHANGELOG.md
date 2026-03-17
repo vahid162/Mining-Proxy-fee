@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.14
+- Make v2rayA core selection explicit in `compose.yaml` via `V2RAYA_V2RAY_BIN` env and default it to `v2ray` (v2ray-core) instead of implicit image default behavior.
+- Add `V2RAYA_V2RAY_BIN` to `.env.example` and README environment docs so operators can override core choice (e.g. `xray`) explicitly.
+
 ## 0.7.13
 - Add a release pre-flight checklist in README (VERSION check, CHANGELOG section check, pytest, and compose validations) to reduce tagged-release failures before pushing `vX.Y.Z`.
 - Clarify that release starts only after pushing the tag because GitHub Actions trigger is configured on `push.tags`, and Git does not push tags by default.
