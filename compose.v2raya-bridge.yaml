@@ -1,0 +1,18 @@
+services:
+  v2raya-socks-bridge:
+    image: ${GOST_IMAGE:-ginuerzh/gost:latest}
+    container_name: v2raya-socks-bridge
+    restart: unless-stopped
+    network_mode: "service:v2raya"
+    depends_on:
+      v2raya:
+        condition: service_healthy
+    command:
+      - -L=tcp://:22070/127.0.0.1:20170
+      - -L=tcp://:22071/127.0.0.1:20171
+      - -L=tcp://:22072/127.0.0.1:20172
+    logging:
+      driver: json-file
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"

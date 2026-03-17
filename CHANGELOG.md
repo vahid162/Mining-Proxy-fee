@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.17
+- Add optional `compose.v2raya-bridge.yaml` overlay with `v2raya-socks-bridge` (GOST sidecar in `service:v2raya` network namespace) to bridge loopback-only v2rayA listeners on ports 22070/22071/22072.
+- Keep canonical default path unchanged (`SOCKS5_HOST=v2raya`, `SOCKS5_PORT=20170`) and document fallback activation/verification and troubleshooting in README.
+- Add lightweight operator preflight helper `deploy/check-socks-reachability.sh` for DNS + TCP checks from `fee-proxy` to configured SOCKS endpoint.
+
 ## 0.7.16
 - Trigger CI workflow on `merge_group` in addition to `pull_request`/`push` so required check `ci / pytest` is reported in merge-queue flows and does not remain pending.
 
