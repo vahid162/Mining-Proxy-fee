@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.23
+- Enforce single-upstream subscribe semantics per miner session by caching the first `mining.subscribe` response and serving it locally for duplicate subscribe requests (no second upstream subscribe RPC).
+- Add integration coverage that verifies duplicate miner subscribe calls still result in a single upstream subscribe while preserving client response shape.
+
 ## 0.7.22
 - Refactor proxy session flow from dual-upstream to single-upstream dual-authorize so `mining.subscribe` + main/fee `mining.authorize` run on one shared upstream connection.
 - Keep fee selection behavior based on `SelectionTracker` / routed-work ratio and `MAX_CONSECUTIVE_FEE_JOBS`, while rewriting submit username per route (`main_user` or `fee_user`) on the same socket.
