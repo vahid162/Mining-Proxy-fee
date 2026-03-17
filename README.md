@@ -74,6 +74,76 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 
 `V2RAYA_CORE_BIN` به‌صورت پیش‌فرض روی `/usr/local/bin/v2ray` تنظیم می‌شود (v2ray-core). اگر بخواهی Xray استفاده کنی، مقدارش را `/usr/local/bin/xray` بگذار.
 
+
+## مسیر پیش‌فرض و مسیر fallback برای SOCKS
+مسیر canonical و پیش‌فرض پروژه **بدون تغییر** است:
+- `fee-proxy -> v2raya:20170 -> upstream`
+- مقدارهای پیش‌فرض `.env.example` هم باید همین بماند:
+  - `SOCKS5_HOST=v2raya`
+  - `SOCKS5_PORT=20170`
+
+نمونه اجرای پیش‌فرض (canonical):
+
+```bash
+docker compose -f compose.yaml up -d
+```
+
+## Fallback برای loopback-only بودن listener های v2rayA
+در بعضی استقرارهای Docker، v2rayA سرویس SOCKS را فقط روی `127.0.0.1:20170` داخل همان کانتینر bind می‌کند.
+در این حالت healthcheck خود v2rayA سبز می‌شود، اما کانتینر sibling (مثل `fee-proxy`) نمی‌تواند به `v2raya:20170` وصل شود و خطای `connection refused` می‌بینی.
+
+برای این سناریو، یک overlay اختیاری اضافه شده است: `compose.v2raya-bridge.yaml`.
+این overlay یک sidecar با GOST بالا می‌آورد که با `network_mode: "service:v2raya"` داخل namespace شبکه v2raya اجرا می‌شود و این forward ها را می‌سازد:
+- `22070 -> 127.0.0.1:20170`
+- `22071 -> 127.0.0.1:20171`
+- `22072 -> 127.0.0.1:20172`
+
+> این مسیر فقط fallback است و مسیر canonical پیش‌فرض را عوض نمی‌کند.
+> `compose.v2raya-bridge.yaml` به‌صورت پیش‌فرض داخل `compose.yaml` merge نشده و باید فقط در صورت نیاز با `-f compose.v2raya-bridge.yaml` فعال شود.
+> در overlay هم عمداً `depends_on: condition: service_healthy` استفاده شده (نه `service_started`) تا با الگوی فعلی پروژه برای وابستگی به سلامت `v2raya` هم‌راستا بماند.
+
+مراحل فعال‌سازی fallback:
+1) `SOCKS5_HOST=v2raya` را همان‌طور نگه دار.
+2) در `.env` مقدار `SOCKS5_PORT=22070` بگذار.
+3) استک را با overlay بالا بیاور:
+
+```bash
+docker compose -f compose.yaml -f compose.v2raya-bridge.yaml up -d
+```
+
+راستی‌آزمایی ساده از داخل `fee-proxy`:
+
+```bash
+docker exec fee-proxy python -c "import os,socket; h=os.getenv('SOCKS5_HOST','v2raya'); p=int(os.getenv('SOCKS5_PORT','22070')); s=socket.create_connection((h,p),5); s.close(); print(f'OK {h}:{p}')"
+```
+
+یا از اسکریپت preflight سبک استفاده کن:
+
+```bash
+SOCKS5_HOST=v2raya SOCKS5_PORT=22070 ./deploy/check-socks-reachability.sh
+```
+
+## Troubleshooting (loopback-only listener)
+اگر این تست fail شد:
+
+```bash
+docker exec fee-proxy python -c "import socket; socket.create_connection(('v2raya',20170),5)"
+```
+
+و داخل v2raya دیدی listener فقط loopback است:
+
+```bash
+docker exec v2raya ss -lntp | grep 20170
+# نمونه مشکل: 127.0.0.1:20170
+```
+
+یعنی healthcheck فعلی فقط دسترسی loopback از داخل خود کانتینر v2raya را تایید می‌کند، نه دسترسی از sibling container ها.
+در این وضعیت overlay زیر را فعال کن:
+
+```bash
+docker compose -f compose.yaml -f compose.v2raya-bridge.yaml up -d
+```
+
 ## Upgrade path
 - مسیر ارتقا: `docs/UPGRADE.md`
 - مسیر بازگشت (rollback): `docs/ROLLBACK.md`
