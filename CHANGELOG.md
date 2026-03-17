@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.20
+- Prevent fee-route lock-in by separating accepted-work reporting (`RatioTracker`) from route-selection accounting (`SelectionTracker`) and selecting routes from routed work plus `MAX_CONSECUTIVE_FEE_JOBS` guard.
+- Add `MAX_CONSECUTIVE_FEE_JOBS` config parsing/validation (`>= 1`) and include reject error payload in submit logs when available.
+- Update proxy and tests so repeated fee rejects and fallback routing no longer keep the selector permanently on `fee` while accepted metrics remain accepted-only.
+
 ## 0.7.19
 - Fix `deploy/check-socks-reachability.sh` to pass `SOCKS5_HOST`/`SOCKS5_PORT` into `docker exec` explicitly, so operator-provided overrides are reliably honored.
 - Clarify README preflight helper wording for host/port override usage.
