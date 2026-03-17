@@ -89,6 +89,13 @@ class FakePool:
         for writer in list(self.writers):
             await send_msg(writer, {"id": None, "method": "mining.set_difficulty", "params": [value]})
 
+    async def broadcast_extranonce(self, extranonce1: str = "abcd", extranonce2_size: int = 4) -> None:
+        for writer in list(self.writers):
+            await send_msg(
+                writer,
+                {"id": None, "method": "mining.set_extranonce", "params": [extranonce1, extranonce2_size]},
+            )
+
     async def broadcast_notify(self, job_id: str, *, clean_jobs: bool = False) -> None:
         for writer in list(self.writers):
             await send_msg(
@@ -385,6 +392,65 @@ async def integration_reject_logging_includes_upstream_error() -> None:
         await shutdown_system(system)
 
 
+async def integration_old_generation_submit_is_rejected_after_extranonce_reset() -> None:
+    system = await setup_system(fee_ratio=1.0)
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await system["pool"].broadcast_notify("job-before-extranonce", clean_jobs=False)
+        old_notify = await read_until_method(reader, "mining.notify")
+
+        await system["pool"].broadcast_extranonce("ee", 4)
+        _ = await read_until_method(reader, "mining.set_extranonce")
+
+        await system["pool"].broadcast_notify("job-after-extranonce", clean_jobs=False)
+        _ = await read_until_method(reader, "mining.notify")
+
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", old_notify["params"][0], "aa", "bb", "cc"]})
+        reject = await read_msg(reader)
+        assert reject["result"] is False
+        assert system["pool"].submits == []
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
+
+
+async def integration_old_generation_submit_is_rejected_after_reauthorize() -> None:
+    system = await setup_system(fee_ratio=1.0)
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await system["pool"].broadcast_notify("job-before-reauth", clean_jobs=False)
+        old_notify = await read_until_method(reader, "mining.notify")
+
+        await send_msg(writer, {"id": 4, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        reauth_resp = await read_msg(reader)
+        assert reauth_resp["result"] is True
+
+        await system["pool"].broadcast_notify("job-after-reauth", clean_jobs=False)
+        _ = await read_until_method(reader, "mining.notify")
+
+        await send_msg(writer, {"id": 5, "method": "mining.submit", "params": ["ignored", old_notify["params"][0], "aa", "bb", "cc"]})
+        reject = await read_msg(reader)
+        assert reject["result"] is False
+        assert system["pool"].submits == []
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
+
+
 def test_integration_single_upstream_dual_authorize_and_routing() -> None:
     asyncio.run(integration_single_upstream_dual_authorize_and_routing())
 
@@ -484,3 +550,11 @@ def test_integration_runtime_failover_and_reconnect() -> None:
             await shutdown_system(system)
 
     asyncio.run(_run())
+
+
+def test_integration_old_generation_submit_is_rejected_after_extranonce_reset() -> None:
+    asyncio.run(integration_old_generation_submit_is_rejected_after_extranonce_reset())
+
+
+def test_integration_old_generation_submit_is_rejected_after_reauthorize() -> None:
+    asyncio.run(integration_old_generation_submit_is_rejected_after_reauthorize())
