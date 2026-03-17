@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.25
+- Strengthen downstream job-generation invalidation on upstream mining-state transitions: clean_jobs, set_difficulty epochs, set_extranonce resets, reconnect, and miner re-authorize boundaries.
+- Keep local stale/unknown submit rejection behavior and enrich generation-mismatch reject logs with explicit invalidation causes (e.g. `stale_due_to_clean_jobs`, `stale_due_to_reconnect`).
+- Add integration tests covering stale local rejection after clean_jobs, re-authorize, and extranonce reset boundaries while preserving normal current-generation submit behavior.
+
 ## 0.7.24
 - Pin downstream `mining.submit` route to the job route chosen at `mining.notify` dispatch time, with per-job generation metadata for stale-safety.
 - Remove unsafe unknown-job fallback routing and reject unknown/stale/generation-mismatched submits locally with explicit `event=local_submit_rejected` logging.
