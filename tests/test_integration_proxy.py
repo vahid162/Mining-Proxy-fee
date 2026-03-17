@@ -89,14 +89,14 @@ class FakePool:
         for writer in list(self.writers):
             await send_msg(writer, {"id": None, "method": "mining.set_difficulty", "params": [value]})
 
-    async def broadcast_notify(self, job_id: str) -> None:
+    async def broadcast_notify(self, job_id: str, *, clean_jobs: bool = False) -> None:
         for writer in list(self.writers):
             await send_msg(
                 writer,
                 {
                     "id": None,
                     "method": "mining.notify",
-                    "params": [job_id, "", "", [], "", "", "", True],
+                    "params": [job_id, "", "", [], "", "", "", clean_jobs],
                 },
             )
 
@@ -161,6 +161,7 @@ async def setup_system(
     authorize_fee_success: bool = True,
     submit_success: bool = True,
     submit_error: list | None = None,
+    fee_ratio: float = 0.5,
 ) -> dict:
     pool = FakePool(authorize_fee_success=authorize_fee_success, submit_success=submit_success, submit_error=submit_error)
     pool_server = await asyncio.start_server(pool.handle, "127.0.0.1", 0)
@@ -179,7 +180,7 @@ async def setup_system(
         upstream_secondary_port=pool_port,
         fee_user="fee.wallet.worker",
         fee_password="x",
-        fee_ratio=0.5,
+        fee_ratio=fee_ratio,
         rpc_timeout_seconds=2.0,
         upstream_read_timeout_seconds=0.3,
         write_timeout_seconds=2.0,
@@ -213,6 +214,93 @@ async def shutdown_system(system: dict) -> None:
         srv.close()
         await srv.wait_closed()
 
+
+
+
+async def integration_unknown_job_submit_is_rejected_locally() -> None:
+    system = await setup_system()
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["main.wallet.worker1", "unknown-job", "aa", "bb", "cc"]})
+        reject = await read_msg(reader)
+        assert reject["result"] is False
+
+        await asyncio.sleep(0.05)
+        assert system["pool"].submits == []
+
+        snapshot = await system["metrics"].snapshot()
+        assert snapshot["job_mismatch_count"] == 1
+        assert snapshot["local_submit_rejects"] == 1
+        assert snapshot["submitted_main"] == 0
+        assert snapshot["submitted_fee"] == 0
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
+
+
+async def integration_submit_route_is_pinned_to_dispatched_job() -> None:
+    system = await setup_system()
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await system["pool"].broadcast_notify("job-fee", clean_jobs=False)
+        notify_fee = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", notify_fee["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await system["pool"].broadcast_notify("job-main", clean_jobs=False)
+        notify_main = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 4, "method": "mining.submit", "params": ["ignored", notify_main["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        assert system["pool"].submits[0][0] == "fee.wallet.worker"
+        assert system["pool"].submits[1][0] == "main.wallet.worker1"
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
+
+
+async def integration_old_generation_submit_is_rejected_locally() -> None:
+    system = await setup_system(fee_ratio=1.0)
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await system["pool"].broadcast_notify("job-old", clean_jobs=False)
+        old_notify = await read_until_method(reader, "mining.notify")
+
+        await system["pool"].broadcast_notify("job-new", clean_jobs=True)
+        _ = await read_until_method(reader, "mining.notify")
+
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", old_notify["params"][0], "aa", "bb", "cc"]})
+        reject = await read_msg(reader)
+        assert reject["result"] is False
+
+        assert system["pool"].submits == []
+        snapshot = await system["metrics"].snapshot()
+        assert snapshot["local_submit_rejects"] == 1
+        assert snapshot["job_mismatch_count"] == 1
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
 
 async def integration_single_upstream_dual_authorize_and_routing() -> None:
     system = await setup_system()
@@ -337,6 +425,18 @@ def test_integration_duplicate_subscribe_uses_cached_response() -> None:
             await shutdown_system(system)
 
     asyncio.run(_run())
+
+
+def test_integration_unknown_job_submit_is_rejected_locally() -> None:
+    asyncio.run(integration_unknown_job_submit_is_rejected_locally())
+
+
+def test_integration_submit_route_is_pinned_to_dispatched_job() -> None:
+    asyncio.run(integration_submit_route_is_pinned_to_dispatched_job())
+
+
+def test_integration_old_generation_submit_is_rejected_locally() -> None:
+    asyncio.run(integration_old_generation_submit_is_rejected_locally())
 
 
 def test_upstream_session_uses_main_upstream_only() -> None:
