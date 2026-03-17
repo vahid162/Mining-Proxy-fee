@@ -3,6 +3,8 @@ services:
     image: ${V2RAYA_IMAGE:-mzz2017/v2raya:latest}
     container_name: v2raya
     restart: unless-stopped
+    environment:
+      V2RAYA_V2RAY_BIN: ${V2RAYA_CORE_BIN:-/usr/local/bin/v2ray}
     expose:
       - "20170"
     ports:
