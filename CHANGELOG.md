@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.18
+- Clarify in README that `compose.v2raya-bridge.yaml` remains strictly opt-in and is not merged into canonical `compose.yaml` by default.
+- Explicitly document that the bridge overlay uses `depends_on: condition: service_healthy` (not `service_started`) to stay aligned with existing v2raya health-gated startup behavior.
+
 ## 0.7.17
 - Add optional `compose.v2raya-bridge.yaml` overlay with `v2raya-socks-bridge` (GOST sidecar in `service:v2raya` network namespace) to bridge loopback-only v2rayA listeners on ports 22070/22071/22072.
 - Keep canonical default path unchanged (`SOCKS5_HOST=v2raya`, `SOCKS5_PORT=20170`) and document fallback activation/verification and troubleshooting in README.

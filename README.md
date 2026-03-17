@@ -99,6 +99,8 @@ docker compose -f compose.yaml up -d
 - `22072 -> 127.0.0.1:20172`
 
 > این مسیر فقط fallback است و مسیر canonical پیش‌فرض را عوض نمی‌کند.
+> `compose.v2raya-bridge.yaml` به‌صورت پیش‌فرض داخل `compose.yaml` merge نشده و باید فقط در صورت نیاز با `-f compose.v2raya-bridge.yaml` فعال شود.
+> در overlay هم عمداً `depends_on: condition: service_healthy` استفاده شده (نه `service_started`) تا با الگوی فعلی پروژه برای وابستگی به سلامت `v2raya` هم‌راستا بماند.
 
 مراحل فعال‌سازی fallback:
 1) `SOCKS5_HOST=v2raya` را همان‌طور نگه دار.
