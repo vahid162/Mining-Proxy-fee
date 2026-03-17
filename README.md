@@ -68,9 +68,11 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 
 ### Images / UI / Logging
 - `APP_VERSION`, `FEE_PROXY_IMAGE`
-- `V2RAYA_IMAGE`, `GOST_IMAGE`
+- `V2RAYA_IMAGE`, `V2RAYA_CORE_BIN`, `GOST_IMAGE`
 - `V2RAYA_UI_BIND_HOST`, `V2RAYA_UI_PORT`
 - `DOCKER_LOG_MAX_SIZE`, `DOCKER_LOG_MAX_FILE`
+
+`V2RAYA_CORE_BIN` به‌صورت پیش‌فرض روی `/usr/local/bin/v2ray` تنظیم می‌شود (v2ray-core). اگر بخواهی Xray استفاده کنی، مقدارش را `/usr/local/bin/xray` بگذار.
 
 ## Upgrade path
 - مسیر ارتقا: `docs/UPGRADE.md`
