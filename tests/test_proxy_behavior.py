@@ -2,7 +2,7 @@ import asyncio
 
 from app.config import Settings
 from app.fee import FeeController, RatioTracker, SelectionTracker
-from app.proxy import MinerMetrics, MinerProxy
+from app.proxy import DownstreamJobRecord, MinerMetrics, MinerProxy, MinerSessionState
 
 
 async def _exercise_global_ratio_scope() -> None:
@@ -91,3 +91,20 @@ def test_proxy_fee_startup_policy_switch() -> None:
 
     assert strict_proxy._should_fail_on_fee_startup_error() is True
     assert best_effort_proxy._should_fail_on_fee_startup_error() is False
+
+
+def test_proxy_reconnect_invalidation_marks_existing_jobs_stale() -> None:
+    proxy = MinerProxy(Settings(fee_user="fee.wallet.worker"), MinerMetrics())
+    session = MinerSessionState(session_id="s00000001", client_addr="127.0.0.1")
+    session.job_generation = 3
+    session.awaiting_post_difficulty_job = True
+    session.awaiting_post_extranonce_job = True
+    session.job_records["job-old"] = DownstreamJobRecord(route="main", upstream_job_id="job-old", generation=3, clean_jobs=False)
+
+    proxy._invalidate_downstream_jobs(session, "stale_due_to_reconnect")
+
+    assert session.job_generation == 4
+    assert session.job_records["job-old"].generation != session.job_generation
+    assert session.awaiting_post_difficulty_job is False
+    assert session.awaiting_post_extranonce_job is False
+    assert session.last_invalidation_cause == "stale_due_to_reconnect"
