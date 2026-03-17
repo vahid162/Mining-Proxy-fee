@@ -3,8 +3,8 @@
 `Mining-Proxy-fee` یک **Stratum-aware mining proxy** برای fee-routing است که به‌صورت Docker-ready برای اجرای تک‌سرور طراحی شده است.
 
 ## What it is
-- مسیر fee-aware روی پورت `LISTEN_PORT` (پیش‌فرض `40040`) با حساب fee جدا (`FEE_USER`).
-- مسیر forwarding ساده روی پورت `60046` (بدون ورود به منطق fee) برای fallback/rollback عملیاتی.
+- مسیر fee-aware روی پورت `LISTEN_PORT` (پیش‌فرض `40040`) با **single-upstream + dual-authorize**: یک اتصال upstream، یک subscribe، و authorize جدا برای main/fee روی همان اتصال.
+- مسیر forwarding ساده روی پورت `60046` فقط برای fallback/rollback عملیاتی (خارج از مسیر نرمال fee-aware).
 - استقرار اپراتوری با Docker Compose و مصرف image آماده از GHCR.
 
 ## Quick Start (اپراتور نهایی)
@@ -36,9 +36,8 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 ## Minimal config
 برای شروع فقط این‌ها را تنظیم کن:
 - `FEE_USER`
-- `FEE_RATIO`
+- `FEE_RATIO` (انتخاب مسیر fee/main فقط در سطح routing داخلی انجام می‌شود؛ upstream مشترک است)
 - `UPSTREAM_HOST`, `UPSTREAM_PRIMARY_PORT`, `UPSTREAM_SECONDARY_PORT`
-- `FEE_UPSTREAM_HOST`, `FEE_UPSTREAM_PRIMARY_PORT`, `FEE_UPSTREAM_SECONDARY_PORT`
 
 اختیاری (در صورت نیاز):
 - `FORWARDER_UPSTREAM_HOST`, `FORWARDER_UPSTREAM_PORT`
@@ -52,7 +51,6 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 
 ### Upstream routing
 - `UPSTREAM_HOST`, `UPSTREAM_PRIMARY_PORT`, `UPSTREAM_SECONDARY_PORT`
-- `FEE_UPSTREAM_HOST`, `FEE_UPSTREAM_PRIMARY_PORT`, `FEE_UPSTREAM_SECONDARY_PORT`
 - `FORWARDER_LISTEN_PORT`, `FORWARDER_UPSTREAM_HOST`, `FORWARDER_UPSTREAM_PORT`
 
 ### Auth / Fee control
