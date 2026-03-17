@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.24
+- Pin downstream `mining.submit` route to the job route chosen at `mining.notify` dispatch time, with per-job generation metadata for stale-safety.
+- Remove unsafe unknown-job fallback routing and reject unknown/stale/generation-mismatched submits locally with explicit `event=local_submit_rejected` logging.
+- Add integration tests for unknown-job local rejection, pinned known-job routing, and old-generation local rejection while keeping normal known-job flow intact.
+
 ## 0.7.23
 - Enforce single-upstream subscribe semantics per miner session by caching the first `mining.subscribe` response and serving it locally for duplicate subscribe requests (no second upstream subscribe RPC).
 - Add integration coverage that verifies duplicate miner subscribe calls still result in a single upstream subscribe while preserving client response shape.

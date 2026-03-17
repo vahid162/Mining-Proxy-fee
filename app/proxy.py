@@ -68,6 +68,7 @@ class MinerMetrics:
     auth_failures_fee: int = 0
     job_mismatch_count: int = 0
     dropped_sessions_max_limit: int = 0
+    local_submit_rejects: int = 0
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
     async def snapshot(self) -> dict[str, float | int]:
@@ -93,6 +94,7 @@ class MinerMetrics:
                 "auth_failures_fee": self.auth_failures_fee,
                 "job_mismatch_count": self.job_mismatch_count,
                 "dropped_sessions_max_limit": self.dropped_sessions_max_limit,
+                "local_submit_rejects": self.local_submit_rejects,
             }
 
 
@@ -103,7 +105,9 @@ class MinerSessionState:
     miner_user: str | None = None
     miner_password: str = "x"
     active_label: str = "main"
+    job_generation: int = 0
     job_route: dict[str, str] = field(default_factory=dict)
+    job_records: dict[str, "DownstreamJobRecord"] = field(default_factory=dict)
     job_difficulty: dict[str, float] = field(default_factory=dict)
     current_difficulty: float = 1.0
     subscribe_raw: dict[str, Any] | None = None
@@ -111,6 +115,14 @@ class MinerSessionState:
     subscribe_error: Any = None
     main_authorized: bool = False
     fee_authorized: bool = False
+
+
+@dataclass
+class DownstreamJobRecord:
+    route: str
+    upstream_job_id: str
+    generation: int
+    clean_jobs: bool
 
 
 class UpstreamSession:
@@ -218,6 +230,16 @@ class MinerProxy:
 
     async def _record_accepted(self, route: str, difficulty: float, session_tracker: RatioTracker) -> None:
         session_tracker.record_accepted(route, difficulty)
+
+    def _extract_notify_clean_jobs(self, message: StratumMessage) -> bool:
+        if message.method != "mining.notify" or not message.params:
+            return False
+        last = message.params[-1]
+        return isinstance(last, bool) and last
+
+    def _bump_job_generation(self, session: MinerSessionState, reason: str) -> None:
+        session.job_generation += 1
+        self._log_session(session, "job_generation_bumped", generation=session.job_generation, reason=reason)
 
     def _should_fail_on_fee_startup_error(self) -> bool:
         return self.cfg.fee_path_startup_policy == "strict"
@@ -332,6 +354,7 @@ class MinerProxy:
             if upstream.reader is None:
                 if not await upstream.reconnect_with_backoff():
                     raise RuntimeError("upstream_permanently_down")
+                self._bump_job_generation(session, "upstream_reconnect")
                 await self._resync_after_reconnect(upstream, session)
 
                 async with self.metrics.lock:
@@ -352,6 +375,7 @@ class MinerProxy:
                 self._log_session(session, "upstream_read_error", err=exc, old_port=old_port)
                 if not await upstream.reconnect_with_backoff():
                     raise RuntimeError("upstream_permanently_down") from exc
+                self._bump_job_generation(session, "upstream_failover")
                 await self._resync_after_reconnect(upstream, session)
                 async with self.metrics.lock:
                     self.metrics.upstream_reconnects_main += 1
@@ -379,6 +403,9 @@ class MinerProxy:
 
             if message.method == "mining.notify":
                 job_id = extract_job_id(message)
+                clean_jobs = self._extract_notify_clean_jobs(message)
+                if clean_jobs:
+                    self._bump_job_generation(session, "notify_clean_jobs")
                 target = await self._select_path(controller, tracker)
                 session.active_label = target
                 difficulty = session.current_difficulty
@@ -386,6 +413,12 @@ class MinerProxy:
                 if job_id:
                     session.job_difficulty[job_id] = difficulty
                     session.job_route[job_id] = target
+                    session.job_records[job_id] = DownstreamJobRecord(
+                        route=target,
+                        upstream_job_id=job_id,
+                        generation=session.job_generation,
+                        clean_jobs=clean_jobs,
+                    )
                 await self._safe_miner_write(miner_writer, line)
                 self._log_session(session, "notify_forwarded", path=target, job_id=job_id or "-")
                 continue
@@ -493,17 +526,44 @@ class MinerProxy:
                     session.miner_user = msg.params[0]
 
                 job_id = extract_submit_job_id(msg)
-                fallback_route = await self._select_path(controller, selection_tracker)
-                route = session.job_route.get(job_id or "", fallback_route)
-                if job_id and job_id not in session.job_route:
+                job_record = session.job_records.get(job_id or "") if job_id else None
+                if not job_record:
                     async with self.metrics.lock:
                         self.metrics.job_mismatch_count += 1
-                    self._log_session(session, "job_mismatch", job_id=job_id, fallback_route=route)
+                        self.metrics.local_submit_rejects += 1
+                    self._log_session(session, "local_submit_rejected", reason="unknown_job", job_id=job_id or "-")
+                    local_reject = {
+                        "id": msg.msg_id,
+                        "result": False,
+                        "error": [21, "stale/unknown job: local reject", None],
+                    }
+                    await self._safe_miner_write(miner_writer, StratumMessage(local_reject).dumps())
+                    continue
+
+                if job_record.generation != session.job_generation:
+                    async with self.metrics.lock:
+                        self.metrics.job_mismatch_count += 1
+                        self.metrics.local_submit_rejects += 1
+                    self._log_session(
+                        session,
+                        "local_submit_rejected",
+                        reason="generation_mismatch",
+                        job_id=job_id or "-",
+                        job_generation=job_record.generation,
+                        active_generation=session.job_generation,
+                    )
+                    local_reject = {
+                        "id": msg.msg_id,
+                        "result": False,
+                        "error": [21, "stale/unknown job: local reject", None],
+                    }
+                    await self._safe_miner_write(miner_writer, StratumMessage(local_reject).dumps())
+                    continue
+
+                route = job_record.route
 
                 session.active_label = route
                 difficulty = session.job_difficulty.get(job_id or "", session.current_difficulty)
-                if not job_id or job_id not in session.job_route:
-                    await self._record_route(route, difficulty, selection_tracker)
 
                 params = list(msg.params)
                 if route == "fee":
