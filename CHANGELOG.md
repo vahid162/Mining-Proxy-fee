@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.16
+- Trigger CI workflow on `merge_group` in addition to `pull_request`/`push` so required check `ci / pytest` is reported in merge-queue flows and does not remain pending.
+
 ## 0.7.15
 - Switch v2rayA core selector to full binary paths by mapping `V2RAYA_V2RAY_BIN` from `${V2RAYA_CORE_BIN:-/usr/local/bin/v2ray}` in Compose.
 - Update `.env.example` and README to document full-path override usage, including Xray with `/usr/local/bin/xray`.
