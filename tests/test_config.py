@@ -73,11 +73,13 @@ def test_settings_defaults_ratio_scope_and_startup_policy(monkeypatch) -> None:
     monkeypatch.setenv("FEE_USER", "fee.wallet.worker")
     monkeypatch.delenv("FEE_RATIO_SCOPE", raising=False)
     monkeypatch.delenv("FEE_PATH_STARTUP_POLICY", raising=False)
+    monkeypatch.delenv("MAX_CONSECUTIVE_FEE_JOBS", raising=False)
 
     cfg = Settings.from_env()
 
     assert cfg.fee_ratio_scope == "global"
     assert cfg.fee_path_startup_policy == "strict"
+    assert cfg.max_consecutive_fee_jobs == 5
 
 
 def test_settings_rejects_invalid_ratio_scope(monkeypatch) -> None:
@@ -122,3 +124,14 @@ def test_settings_rejects_invalid_max_pending_rpcs(monkeypatch) -> None:
         raise AssertionError("Expected ValueError")
     except ValueError as exc:
         assert "MAX_PENDING_RPCS" in str(exc)
+
+
+def test_settings_rejects_invalid_max_consecutive_fee_jobs(monkeypatch) -> None:
+    monkeypatch.setenv("FEE_USER", "fee.wallet.worker")
+    monkeypatch.setenv("MAX_CONSECUTIVE_FEE_JOBS", "0")
+
+    try:
+        Settings.from_env()
+        raise AssertionError("Expected ValueError")
+    except ValueError as exc:
+        assert "MAX_CONSECUTIVE_FEE_JOBS" in str(exc)
