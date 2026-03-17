@@ -52,6 +52,7 @@ class Settings:
     max_pending_rpcs: int = 256
     fee_ratio_scope: str = "global"
     fee_path_startup_policy: str = "strict"
+    max_consecutive_fee_jobs: int = 5
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -82,6 +83,7 @@ class Settings:
             max_pending_rpcs=_env_int("MAX_PENDING_RPCS", 256),
             fee_ratio_scope=os.getenv("FEE_RATIO_SCOPE", "global"),
             fee_path_startup_policy=os.getenv("FEE_PATH_STARTUP_POLICY", "strict"),
+            max_consecutive_fee_jobs=_env_int("MAX_CONSECUTIVE_FEE_JOBS", 5),
         )
         if not (0 < cfg.fee_ratio < 1):
             raise ValueError("FEE_RATIO must be between 0 and 1")
@@ -107,4 +109,6 @@ class Settings:
             raise ValueError("FEE_RATIO_SCOPE must be one of: global, session")
         if cfg.fee_path_startup_policy not in {"strict", "best_effort"}:
             raise ValueError("FEE_PATH_STARTUP_POLICY must be one of: strict, best_effort")
+        if cfg.max_consecutive_fee_jobs < 1:
+            raise ValueError("MAX_CONSECUTIVE_FEE_JOBS must be >= 1")
         return cfg

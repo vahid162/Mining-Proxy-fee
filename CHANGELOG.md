@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.21
+- Add regression integration test ensuring `submitted_main` still grows when fee submits are repeatedly rejected.
+- Add regression integration test for `mining.submit` without `job_id` to verify fallback routing does not get stuck on fee.
+- Add regression integration test asserting reject `submit_result` logs include upstream `error` payload.
+
+## 0.7.20
+- Prevent fee-route lock-in by separating accepted-work reporting (`RatioTracker`) from route-selection accounting (`SelectionTracker`) and selecting routes from routed work plus `MAX_CONSECUTIVE_FEE_JOBS` guard.
+- Add `MAX_CONSECUTIVE_FEE_JOBS` config parsing/validation (`>= 1`) and include reject error payload in submit logs when available.
+- Update proxy and tests so repeated fee rejects and fallback routing no longer keep the selector permanently on `fee` while accepted metrics remain accepted-only.
+
+## 0.7.19
+- Fix `deploy/check-socks-reachability.sh` to pass `SOCKS5_HOST`/`SOCKS5_PORT` into `docker exec` explicitly, so operator-provided overrides are reliably honored.
+- Clarify README preflight helper wording for host/port override usage.
+
+## 0.7.18
+- Clarify in README that `compose.v2raya-bridge.yaml` remains strictly opt-in and is not merged into canonical `compose.yaml` by default.
+- Explicitly document that the bridge overlay uses `depends_on: condition: service_healthy` (not `service_started`) to stay aligned with existing v2raya health-gated startup behavior.
+
+## 0.7.17
+- Add optional `compose.v2raya-bridge.yaml` overlay with `v2raya-socks-bridge` (GOST sidecar in `service:v2raya` network namespace) to bridge loopback-only v2rayA listeners on ports 22070/22071/22072.
+- Keep canonical default path unchanged (`SOCKS5_HOST=v2raya`, `SOCKS5_PORT=20170`) and document fallback activation/verification and troubleshooting in README.
+- Add lightweight operator preflight helper `deploy/check-socks-reachability.sh` for DNS + TCP checks from `fee-proxy` to configured SOCKS endpoint.
+
 ## 0.7.16
 - Trigger CI workflow on `merge_group` in addition to `pull_request`/`push` so required check `ci / pytest` is reported in merge-queue flows and does not remain pending.
 

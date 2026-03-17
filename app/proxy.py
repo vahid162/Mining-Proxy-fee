@@ -7,7 +7,7 @@ from itertools import count
 from typing import Any
 
 from .config import Settings
-from .fee import FeeController, RatioTracker
+from .fee import FeeController, RatioTracker, SelectionTracker
 from .stratum import StratumMessage, extract_job_id, extract_set_difficulty, extract_submit_job_id, parse_line
 
 logger = logging.getLogger(__name__)
@@ -211,23 +211,26 @@ class MinerProxy:
         self.cfg = cfg
         self.metrics = metrics
         self._session_slots = asyncio.Semaphore(cfg.max_sessions)
-        self._global_tracker = RatioTracker()
-        self._global_controller = FeeController(cfg.fee_ratio)
+        self._global_selection_tracker = SelectionTracker()
+        self._global_controller = FeeController(cfg.fee_ratio, cfg.max_consecutive_fee_jobs)
         self._global_tracker_lock = asyncio.Lock()
 
 
-    async def _select_path(self, controller: FeeController, session_tracker: RatioTracker) -> str:
+    async def _select_path(self, controller: FeeController, session_tracker: SelectionTracker) -> str:
         if self.cfg.fee_ratio_scope == "session":
             return controller.select_path(session_tracker)
 
         async with self._global_tracker_lock:
-            return self._global_controller.select_path(self._global_tracker)
+            return self._global_controller.select_path(self._global_selection_tracker)
+
+    async def _record_route(self, route: str, difficulty: float, session_tracker: SelectionTracker) -> None:
+        session_tracker.record_route(route, difficulty)
+        if self.cfg.fee_ratio_scope == "global":
+            async with self._global_tracker_lock:
+                self._global_selection_tracker.record_route(route, difficulty)
 
     async def _record_accepted(self, route: str, difficulty: float, session_tracker: RatioTracker) -> None:
         session_tracker.record_accepted(route, difficulty)
-        if self.cfg.fee_ratio_scope == "global":
-            async with self._global_tracker_lock:
-                self._global_tracker.record_accepted(route, difficulty)
 
     def _should_fail_on_fee_startup_error(self) -> bool:
         return self.cfg.fee_path_startup_policy == "strict"
@@ -258,8 +261,9 @@ class MinerProxy:
             await miner_writer.wait_closed()
             return
 
-        controller = FeeController(self.cfg.fee_ratio)
-        tracker = RatioTracker()
+        controller = FeeController(self.cfg.fee_ratio, self.cfg.max_consecutive_fee_jobs)
+        accepted_tracker = RatioTracker()
+        selection_tracker = SelectionTracker()
         session = MinerSessionState(session_id=session_id, client_addr=client_addr, miner_password=self.cfg.main_password)
         main: UpstreamSession | None = None
         fee: UpstreamSession | None = None
@@ -277,9 +281,9 @@ class MinerProxy:
             self._log_session(session, "upstreams_connected", main_port=main.connected_port, fee_port=fee.connected_port)
 
             tasks = [
-                asyncio.create_task(self._relay_upstream(main, miner_writer, session, controller, tracker)),
-                asyncio.create_task(self._relay_upstream(fee, miner_writer, session, controller, tracker)),
-                asyncio.create_task(self._relay_miner(miner_reader, miner_writer, main, fee, controller, tracker, session)),
+                asyncio.create_task(self._relay_upstream(main, miner_writer, session, controller, selection_tracker)),
+                asyncio.create_task(self._relay_upstream(fee, miner_writer, session, controller, selection_tracker)),
+                asyncio.create_task(self._relay_miner(miner_reader, miner_writer, main, fee, controller, selection_tracker, accepted_tracker, session)),
             ]
 
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -342,7 +346,7 @@ class MinerProxy:
         miner_writer: asyncio.StreamWriter,
         session: MinerSessionState,
         controller: FeeController,
-        tracker: RatioTracker,
+        tracker: SelectionTracker,
     ) -> None:
         path_state = session.paths[upstream.label]
 
@@ -402,13 +406,18 @@ class MinerProxy:
                 path_state.current_difficulty = diff
 
             if message.method == "mining.notify":
+                job_id = extract_job_id(message)
+                if job_id and job_id in session.job_route and session.job_route[job_id] != upstream.label:
+                    continue
+
                 target = await self._select_path(controller, tracker)
                 if upstream.label != target:
                     continue
                 session.active_label = upstream.label
-                job_id = extract_job_id(message)
+                difficulty = path_state.current_difficulty
+                await self._record_route(upstream.label, difficulty, tracker)
                 if job_id:
-                    path_state.jobs[job_id] = path_state.current_difficulty
+                    path_state.jobs[job_id] = difficulty
                     session.job_route[job_id] = upstream.label
                 await self._safe_miner_write(miner_writer, line)
                 self._log_session(session, "notify_forwarded", path=upstream.label, job_id=job_id or "-")
@@ -448,7 +457,8 @@ class MinerProxy:
         main: UpstreamSession,
         fee: UpstreamSession,
         controller: FeeController,
-        tracker: RatioTracker,
+        selection_tracker: SelectionTracker,
+        accepted_tracker: RatioTracker,
         session: MinerSessionState,
     ) -> None:
         while True:
@@ -513,7 +523,7 @@ class MinerProxy:
                     session.miner_user = msg.params[0]
 
                 job_id = extract_submit_job_id(msg)
-                fallback_route = await self._select_path(controller, tracker)
+                fallback_route = await self._select_path(controller, selection_tracker)
                 route = session.job_route.get(job_id or "", fallback_route)
                 if job_id and job_id not in session.job_route:
                     async with self.metrics.lock:
@@ -523,6 +533,8 @@ class MinerProxy:
                 session.active_label = route
                 route_state = session.paths[route]
                 difficulty = route_state.jobs.get(job_id or "", route_state.current_difficulty)
+                if not job_id or job_id not in session.job_route:
+                    await self._record_route(route, difficulty, selection_tracker)
 
                 params = list(msg.params)
                 if route == "fee":
@@ -535,7 +547,7 @@ class MinerProxy:
                     async with self.metrics.lock:
                         self.metrics.submitted_fee += 1
                         if resp.raw.get("result") is True:
-                            await self._record_accepted("fee", difficulty, tracker)
+                            await self._record_accepted("fee", difficulty, accepted_tracker)
                             self.metrics.accepted_fee += 1
                             self.metrics.accepted_fee_work += difficulty
                         else:
@@ -548,20 +560,21 @@ class MinerProxy:
                     async with self.metrics.lock:
                         self.metrics.submitted_main += 1
                         if resp.raw.get("result") is True:
-                            await self._record_accepted("main", difficulty, tracker)
+                            await self._record_accepted("main", difficulty, accepted_tracker)
                             self.metrics.accepted_main += 1
                             self.metrics.accepted_main_work += difficulty
                         else:
                             self.metrics.rejected_main += 1
 
-                self._log_session(
-                    session,
-                    "submit_result",
-                    route=route,
-                    job_id=job_id or "-",
-                    accepted=bool(resp.raw.get("result") is True),
-                    difficulty=round(difficulty, 6),
-                )
+                log_fields: dict[str, Any] = {
+                    "route": route,
+                    "job_id": job_id or "-",
+                    "accepted": bool(resp.raw.get("result") is True),
+                    "difficulty": round(difficulty, 6),
+                }
+                if resp.raw.get("result") is not True and resp.raw.get("error") is not None:
+                    log_fields["error"] = resp.raw.get("error")
+                self._log_session(session, "submit_result", **log_fields)
                 await self._safe_miner_write(miner_writer, resp.dumps())
                 continue
 
