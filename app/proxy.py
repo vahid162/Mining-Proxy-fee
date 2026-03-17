@@ -107,6 +107,8 @@ class MinerSessionState:
     job_difficulty: dict[str, float] = field(default_factory=dict)
     current_difficulty: float = 1.0
     subscribe_raw: dict[str, Any] | None = None
+    subscribe_result: Any = None
+    subscribe_error: Any = None
     main_authorized: bool = False
     fee_authorized: bool = False
 
@@ -431,10 +433,21 @@ class MinerProxy:
             method = msg.method
 
             if method == "mining.subscribe":
-                session.subscribe_raw = dict(msg.raw)
-                resp = await self._rpc(upstream, msg.raw)
-                await self._safe_miner_write(miner_writer, resp.dumps())
-                self._log_session(session, "subscribe_ok")
+                if session.subscribe_raw is None:
+                    session.subscribe_raw = dict(msg.raw)
+                    resp = await self._rpc(upstream, msg.raw)
+                    session.subscribe_result = resp.raw.get("result")
+                    session.subscribe_error = resp.raw.get("error")
+                    await self._safe_miner_write(miner_writer, resp.dumps())
+                    self._log_session(session, "subscribe_ok")
+                else:
+                    cached = {
+                        "id": msg.msg_id,
+                        "result": session.subscribe_result,
+                        "error": session.subscribe_error,
+                    }
+                    await self._safe_miner_write(miner_writer, StratumMessage(cached).dumps())
+                    self._log_session(session, "subscribe_cached")
                 continue
 
             if method == "mining.authorize":

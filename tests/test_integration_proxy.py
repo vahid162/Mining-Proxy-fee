@@ -40,6 +40,7 @@ class FakePool:
     writers: list[asyncio.StreamWriter] = field(default_factory=list)
     authorizations: list[str] = field(default_factory=list)
     submits: list[tuple[str, str]] = field(default_factory=list)
+    subscribes: int = 0
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         self.writers.append(writer)
@@ -53,6 +54,7 @@ class FakePool:
                 mid = msg.get("id")
 
                 if method == "mining.subscribe":
+                    self.subscribes += 1
                     await send_msg(writer, {"id": mid, "result": [None, "aa", 4], "error": None})
                 elif method == "mining.authorize":
                     user = msg.get("params", [""])[0]
@@ -310,6 +312,31 @@ def test_integration_reject_logging_includes_upstream_error(caplog) -> None:
         "event=submit_result" in rec.message and "accepted=False" in rec.message and "error=[20, 'stale share', None]" in rec.message
         for rec in caplog.records
     )
+
+
+def test_integration_duplicate_subscribe_uses_cached_response() -> None:
+    async def _run() -> None:
+        system = await setup_system()
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+
+            await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+            first = await read_msg(reader)
+            assert first["id"] == 1
+
+            await send_msg(writer, {"id": 2, "method": "mining.subscribe", "params": []})
+            second = await read_msg(reader)
+            assert second["id"] == 2
+            assert second["result"] == first["result"]
+
+            assert system["pool"].subscribes == 1
+
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            await shutdown_system(system)
+
+    asyncio.run(_run())
 
 
 def test_upstream_session_uses_main_upstream_only() -> None:
