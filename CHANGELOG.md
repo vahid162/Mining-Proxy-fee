@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.15
+- Switch v2rayA core selector to full binary paths by mapping `V2RAYA_V2RAY_BIN` from `${V2RAYA_CORE_BIN:-/usr/local/bin/v2ray}` in Compose.
+- Update `.env.example` and README to document full-path override usage, including Xray with `/usr/local/bin/xray`.
+
 ## 0.7.14
 - Make v2rayA core selection explicit in `compose.yaml` via `V2RAYA_V2RAY_BIN` env and default it to `v2ray` (v2ray-core) instead of implicit image default behavior.
 - Add `V2RAYA_V2RAY_BIN` to `.env.example` and README environment docs so operators can override core choice (e.g. `xray`) explicitly.
