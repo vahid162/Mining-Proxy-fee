@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.22
+- Refactor proxy session flow from dual-upstream to single-upstream dual-authorize so `mining.subscribe` + main/fee `mining.authorize` run on one shared upstream connection.
+- Keep fee selection behavior based on `SelectionTracker` / routed-work ratio and `MAX_CONSECUTIVE_FEE_JOBS`, while rewriting submit username per route (`main_user` or `fee_user`) on the same socket.
+- Update integration tests for single-connection dual-authorize behavior, shared notify stream, route-specific submit username rewriting, and preserved reject logging with upstream error payload.
+
 ## 0.7.21
 - Add regression integration test ensuring `submitted_main` still grows when fee submits are repeatedly rejected.
 - Add regression integration test for `mining.submit` without `job_id` to verify fallback routing does not get stuck on fee.
