@@ -254,7 +254,7 @@ async def integration_unknown_job_submit_is_rejected_locally() -> None:
 
 
 async def integration_submit_route_is_pinned_to_dispatched_job() -> None:
-    system = await setup_system()
+    system = await setup_system(fee_ratio=1.0)
     try:
         reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
         await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
@@ -311,6 +311,161 @@ async def integration_old_generation_submit_is_rejected_locally() -> None:
         await shutdown_system(system)
 
 
+
+
+
+async def integration_fee_route_waits_for_arm_before_forwarding_fee_jobs() -> None:
+    system = await setup_system(fee_ratio=1.0)
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await system["pool"].broadcast_notify("job-arm-0", clean_jobs=False)
+        notify_0 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", notify_0["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await system["pool"].broadcast_notify("job-arm-1", clean_jobs=False)
+        notify_1 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 4, "method": "mining.submit", "params": ["ignored", notify_1["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        assert system["pool"].submits[0][0] == "main.wallet.worker1"
+        assert system["pool"].submits[1][0] == "fee.wallet.worker"
+
+        snapshot = await system["metrics"].snapshot()
+        assert snapshot["fee_not_ready_skips"] == 1
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
+
+
+async def integration_fee_route_is_disarmed_after_difficulty_boundary() -> None:
+    system = await setup_system(fee_ratio=1.0)
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await system["pool"].broadcast_notify("job-before-diff-0", clean_jobs=False)
+        n0 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", n0["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await system["pool"].broadcast_notify("job-before-diff-1", clean_jobs=False)
+        n1 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 4, "method": "mining.submit", "params": ["ignored", n1["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await system["pool"].broadcast_difficulty(32.0)
+        _ = await read_until_method(reader, "mining.set_difficulty")
+
+        await system["pool"].broadcast_notify("job-after-diff-0", clean_jobs=False)
+        n2 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 5, "method": "mining.submit", "params": ["ignored", n2["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await system["pool"].broadcast_notify("job-after-diff-1", clean_jobs=False)
+        n3 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 6, "method": "mining.submit", "params": ["ignored", n3["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        submit_users = [u for u, _ in system["pool"].submits]
+        assert submit_users == ["main.wallet.worker1", "fee.wallet.worker", "main.wallet.worker1", "fee.wallet.worker"]
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
+
+
+async def integration_fee_route_is_disarmed_after_extranonce_boundary() -> None:
+    system = await setup_system(fee_ratio=1.0)
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await system["pool"].broadcast_notify("job-before-extra-0", clean_jobs=False)
+        n0 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", n0["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await system["pool"].broadcast_notify("job-before-extra-1", clean_jobs=False)
+        n1 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 4, "method": "mining.submit", "params": ["ignored", n1["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await system["pool"].broadcast_extranonce("ab", 4)
+        _ = await read_until_method(reader, "mining.set_extranonce")
+
+        await system["pool"].broadcast_notify("job-after-extra-0", clean_jobs=False)
+        n2 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 5, "method": "mining.submit", "params": ["ignored", n2["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await system["pool"].broadcast_notify("job-after-extra-1", clean_jobs=False)
+        n3 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 6, "method": "mining.submit", "params": ["ignored", n3["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        submit_users = [u for u, _ in system["pool"].submits]
+        assert submit_users == ["main.wallet.worker1", "fee.wallet.worker", "main.wallet.worker1", "fee.wallet.worker"]
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
+
+
+async def integration_fee_route_is_disarmed_after_reauthorize_boundary() -> None:
+    system = await setup_system(fee_ratio=1.0)
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
+        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
+        _ = await read_msg(reader)
+        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        _ = await read_msg(reader)
+
+        await system["pool"].broadcast_notify("job-before-reauth-ready-0", clean_jobs=False)
+        n0 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", n0["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await system["pool"].broadcast_notify("job-before-reauth-ready-1", clean_jobs=False)
+        n1 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 4, "method": "mining.submit", "params": ["ignored", n1["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await send_msg(writer, {"id": 7, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await system["pool"].broadcast_notify("job-after-reauth-0", clean_jobs=False)
+        n2 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 8, "method": "mining.submit", "params": ["ignored", n2["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        await system["pool"].broadcast_notify("job-after-reauth-1", clean_jobs=False)
+        n3 = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 9, "method": "mining.submit", "params": ["ignored", n3["params"][0], "aa", "bb", "cc"]})
+        assert (await read_msg(reader))["result"] is True
+
+        submit_users = [u for u, _ in system["pool"].submits]
+        assert submit_users == ["main.wallet.worker1", "fee.wallet.worker", "main.wallet.worker1", "fee.wallet.worker"]
+
+        writer.close()
+        await writer.wait_closed()
+    finally:
+        await shutdown_system(system)
 
 async def integration_set_difficulty_is_deferred_until_next_notify() -> None:
     system = await setup_system(fee_ratio=1.0)
@@ -522,83 +677,6 @@ async def integration_old_generation_submit_is_rejected_after_reauthorize() -> N
         await shutdown_system(system)
 
 
-
-async def integration_fee_jobs_are_suppressed_until_route_is_armed() -> None:
-    system = await setup_system(fee_ratio=1.0)
-    try:
-        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
-        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
-        _ = await read_msg(reader)
-        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
-        _ = await read_msg(reader)
-
-        await system["pool"].broadcast_notify("job-before-arm", clean_jobs=False)
-        first_notify = await read_until_method(reader, "mining.notify")
-        assert first_notify["params"][0] == "job-before-arm"
-
-        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", "job-before-arm", "aa", "bb", "cc"]})
-        assert (await read_msg(reader))["result"] is True
-        assert system["pool"].submits[-1][0] == "main.wallet.worker1"
-
-        await system["pool"].broadcast_notify("job-after-arm", clean_jobs=False)
-        second_notify = await read_until_method(reader, "mining.notify")
-        assert second_notify["params"][0] == "job-after-arm"
-
-        await send_msg(writer, {"id": 4, "method": "mining.submit", "params": ["ignored", "job-after-arm", "aa", "bb", "cc"]})
-        assert (await read_msg(reader))["result"] is True
-        assert system["pool"].submits[-1][0] == "fee.wallet.worker"
-
-        snapshot = await system["metrics"].snapshot()
-        assert snapshot["fee_not_ready_skips"] == 1
-        assert snapshot["submitted_main"] >= 1
-        assert snapshot["submitted_fee"] >= 1
-
-        writer.close()
-        await writer.wait_closed()
-    finally:
-        await shutdown_system(system)
-
-
-async def integration_fee_route_rearms_only_after_notify_following_difficulty_change() -> None:
-    system = await setup_system(fee_ratio=1.0)
-    try:
-        reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
-        await send_msg(writer, {"id": 1, "method": "mining.subscribe", "params": []})
-        _ = await read_msg(reader)
-        await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
-        _ = await read_msg(reader)
-
-        await system["pool"].broadcast_notify("job-arm-0", clean_jobs=False)
-        _ = await read_until_method(reader, "mining.notify")
-        await system["pool"].broadcast_notify("job-fee-0", clean_jobs=False)
-        _ = await read_until_method(reader, "mining.notify")
-
-        await system["pool"].broadcast_difficulty(16.0)
-        _ = await read_until_method(reader, "mining.set_difficulty")
-
-        await system["pool"].broadcast_notify("job-main-after-diff", clean_jobs=False)
-        _ = await read_until_method(reader, "mining.notify")
-        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", "job-main-after-diff", "aa", "bb", "cc"]})
-        assert (await read_msg(reader))["result"] is True
-        assert system["pool"].submits[-1][0] == "main.wallet.worker1"
-
-        await system["pool"].broadcast_notify("job-fee-after-diff", clean_jobs=False)
-        _ = await read_until_method(reader, "mining.notify")
-        await send_msg(writer, {"id": 4, "method": "mining.submit", "params": ["ignored", "job-fee-after-diff", "aa", "bb", "cc"]})
-        assert (await read_msg(reader))["result"] is True
-        assert system["pool"].submits[-1][0] == "fee.wallet.worker"
-
-        snapshot = await system["metrics"].snapshot()
-        assert snapshot["fee_not_ready_skips"] >= 1
-
-        writer.close()
-        await writer.wait_closed()
-    finally:
-        await shutdown_system(system)
-
-
-
-
 def test_integration_single_upstream_dual_authorize_and_routing() -> None:
     asyncio.run(integration_single_upstream_dual_authorize_and_routing())
 
@@ -715,9 +793,18 @@ def test_integration_set_difficulty_is_deferred_until_next_notify() -> None:
 def test_integration_set_extranonce_is_deferred_until_next_notify() -> None:
     asyncio.run(integration_set_extranonce_is_deferred_until_next_notify())
 
-def test_integration_fee_jobs_are_suppressed_until_route_is_armed() -> None:
-    asyncio.run(integration_fee_jobs_are_suppressed_until_route_is_armed())
+
+def test_integration_fee_route_waits_for_arm_before_forwarding_fee_jobs() -> None:
+    asyncio.run(integration_fee_route_waits_for_arm_before_forwarding_fee_jobs())
 
 
-def test_integration_fee_route_rearms_only_after_notify_following_difficulty_change() -> None:
-    asyncio.run(integration_fee_route_rearms_only_after_notify_following_difficulty_change())
+def test_integration_fee_route_is_disarmed_after_difficulty_boundary() -> None:
+    asyncio.run(integration_fee_route_is_disarmed_after_difficulty_boundary())
+
+
+def test_integration_fee_route_is_disarmed_after_extranonce_boundary() -> None:
+    asyncio.run(integration_fee_route_is_disarmed_after_extranonce_boundary())
+
+
+def test_integration_fee_route_is_disarmed_after_reauthorize_boundary() -> None:
+    asyncio.run(integration_fee_route_is_disarmed_after_reauthorize_boundary())

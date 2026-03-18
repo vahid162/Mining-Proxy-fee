@@ -1,9 +1,9 @@
 # Changelog
 
 ## 0.7.27
-- Add explicit fee-route armed/readiness gating so fee dispatch stays on main until authorize/resync boundaries are settled and a fresh post-boundary `mining.notify` arrives.
-- Disarm fee readiness on session start, re-authorize, reconnect, `mining.set_difficulty`, and `mining.set_extranonce`, with greppable logs/metric for skipped fee slices while preserving local stale protections.
-- Add proxy/integration tests covering fee readiness arming/disarming, downstream suppression before arming, and continued main-path mining during fee grace windows.
+- Add explicit fee-route arming/disarming state so fee jobs are suppressed until the fee path is truly ready after authorize + post-boundary notify.
+- Disarm fee readiness on session start, reconnect/failover/re-authorize invalidation, difficulty pending, extranonce pending, and clean_jobs invalidation while keeping existing stale protections.
+- Add `fee_not_ready_skips` metric and integration tests for fee readiness windows and boundary disarm behavior.
 
 ## 0.7.26
 - Defer job-generation invalidation for `mining.set_difficulty` and `mining.set_extranonce` until the next `mining.notify`, with explicit pending/committed epoch logs.
