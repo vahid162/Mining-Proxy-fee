@@ -262,14 +262,14 @@ async def integration_submit_route_is_pinned_to_dispatched_job() -> None:
         await send_msg(writer, {"id": 2, "method": "mining.authorize", "params": ["main.wallet.worker1", "x"]})
         _ = await read_msg(reader)
 
-        await system["pool"].broadcast_notify("job-fee", clean_jobs=False)
-        notify_fee = await read_until_method(reader, "mining.notify")
-        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", notify_fee["params"][0], "aa", "bb", "cc"]})
+        await system["pool"].broadcast_notify("job-main-boundary", clean_jobs=False)
+        notify_main = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", notify_main["params"][0], "aa", "bb", "cc"]})
         assert (await read_msg(reader))["result"] is True
 
-        await system["pool"].broadcast_notify("job-main", clean_jobs=False)
-        notify_main = await read_until_method(reader, "mining.notify")
-        await send_msg(writer, {"id": 4, "method": "mining.submit", "params": ["ignored", notify_main["params"][0], "aa", "bb", "cc"]})
+        await system["pool"].broadcast_notify("job-fee", clean_jobs=False)
+        notify_fee = await read_until_method(reader, "mining.notify")
+        await send_msg(writer, {"id": 4, "method": "mining.submit", "params": ["ignored", notify_fee["params"][0], "aa", "bb", "cc"]})
         assert (await read_msg(reader))["result"] is True
 
         assert system["pool"].submits[0][0] == "main.wallet.worker1"

@@ -311,6 +311,7 @@ class MinerProxy:
 
             self._disarm_fee_route(session, "session_start")
             self._log_session(session, "session_start")
+            self._disarm_fee_route(session, "session_start")
             upstream = UpstreamSession(self.cfg)
             await upstream.connect()
             self._log_session(session, "upstream_connected", port=upstream.connected_port)
@@ -488,6 +489,8 @@ class MinerProxy:
                     )
                 await self._safe_miner_write(miner_writer, line)
                 self._log_session(session, "notify_forwarded", path=target, job_id=job_id or "-")
+                if self._can_arm_fee_route(session):
+                    self._arm_fee_route(session, job_id)
                 continue
 
             if message.method == "mining.set_extranonce":
