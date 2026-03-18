@@ -121,6 +121,7 @@ class MinerSessionState:
     main_authorized: bool = False
     fee_authorized: bool = False
     fee_ready: bool = False
+    fee_needs_fresh_notify: bool = True
 
 
 @dataclass
@@ -252,22 +253,48 @@ class MinerProxy:
         self._bump_job_generation(session, reason)
         session.awaiting_post_difficulty_job = False
         session.awaiting_post_extranonce_job = False
-        self._disarm_fee_route(session, reason)
 
-    def _is_fee_ready_boundary_satisfied(self, session: MinerSessionState) -> bool:
-        return bool(
+    def _disarm_fee_route(self, session: MinerSessionState, reason: str) -> None:
+        was_ready = session.fee_ready
+        session.fee_ready = False
+        session.fee_needs_fresh_notify = True
+        self._log_session(session, "fee_route_disarmed", reason=reason, was_ready=was_ready)
+
+    def _can_arm_fee_route(self, session: MinerSessionState) -> bool:
+        return (
             session.fee_authorized
             and not session.awaiting_post_difficulty_job
             and not session.awaiting_post_extranonce_job
+            and session.fee_needs_fresh_notify
+            and not session.fee_ready
         )
 
-    def _disarm_fee_route(self, session: MinerSessionState, reason: str) -> None:
-        session.fee_ready = False
-        self._log_session(session, "fee_route_disarmed", reason=reason)
-
-    def _arm_fee_route(self, session: MinerSessionState, reason: str, job_id: str | None = None) -> None:
+    def _arm_fee_route(self, session: MinerSessionState, job_id: str | None) -> None:
         session.fee_ready = True
-        self._log_session(session, "fee_route_armed", reason=reason, job_id=job_id or "-")
+        session.fee_needs_fresh_notify = False
+        self._log_session(session, "fee_route_armed", job_id=job_id or "-")
+
+    async def _select_notify_route(
+        self,
+        session: MinerSessionState,
+        controller: FeeController,
+        tracker: SelectionTracker,
+        job_id: str | None,
+    ) -> str:
+        target = await self._select_path(controller, tracker)
+        if target == "fee" and not session.fee_ready:
+            async with self.metrics.lock:
+                self.metrics.fee_not_ready_skips += 1
+            self._log_session(
+                session,
+                "fee_route_not_ready_skip",
+                requested_path="fee",
+                fallback_path="main",
+                job_id=job_id or "-",
+            )
+            self._log_session(session, "fee_job_suppressed_until_ready", job_id=job_id or "-")
+            return "main"
+        return target
 
     def _should_fail_on_fee_startup_error(self) -> bool:
         return self.cfg.fee_path_startup_policy == "strict"
@@ -309,7 +336,6 @@ class MinerProxy:
             async with self.metrics.lock:
                 self.metrics.active_miners += 1
 
-            self._disarm_fee_route(session, "session_start")
             self._log_session(session, "session_start")
             self._disarm_fee_route(session, "session_start")
             upstream = UpstreamSession(self.cfg)
@@ -385,6 +411,7 @@ class MinerProxy:
                 if not await upstream.reconnect_with_backoff():
                     raise RuntimeError("upstream_permanently_down")
                 self._invalidate_downstream_jobs(session, "stale_due_to_reconnect")
+                self._disarm_fee_route(session, "upstream_reconnect")
                 await self._resync_after_reconnect(upstream, session)
 
                 async with self.metrics.lock:
@@ -406,6 +433,7 @@ class MinerProxy:
                 if not await upstream.reconnect_with_backoff():
                     raise RuntimeError("upstream_permanently_down") from exc
                 self._invalidate_downstream_jobs(session, "stale_due_to_reconnect")
+                self._disarm_fee_route(session, "upstream_reconnect")
                 await self._resync_after_reconnect(upstream, session)
                 async with self.metrics.lock:
                     self.metrics.upstream_reconnects_main += 1
@@ -432,7 +460,7 @@ class MinerProxy:
                 session.current_difficulty = diff
                 if not session.awaiting_post_difficulty_job:
                     session.awaiting_post_difficulty_job = True
-                    self._disarm_fee_route(session, "stale_due_to_difficulty_epoch")
+                    self._disarm_fee_route(session, "fee_set_difficulty")
                     self._log_session(
                         session,
                         "difficulty_epoch_pending",
@@ -444,7 +472,6 @@ class MinerProxy:
                 clean_jobs = self._extract_notify_clean_jobs(message)
                 if clean_jobs:
                     self._bump_job_generation(session, "stale_due_to_clean_jobs")
-                    self._disarm_fee_route(session, "stale_due_to_clean_jobs")
 
                 if session.awaiting_post_difficulty_job:
                     self._bump_job_generation(session, "stale_due_to_difficulty_epoch")
@@ -466,15 +493,7 @@ class MinerProxy:
                         job_id=job_id or "-",
                     )
 
-                target = await self._select_path(controller, tracker)
-                if target == "fee" and not session.fee_ready:
-                    async with self.metrics.lock:
-                        self.metrics.fee_not_ready_skips += 1
-                    self._log_session(session, "fee_route_not_ready_skip", job_id=job_id or "-")
-                    self._log_session(session, "fee_job_suppressed_until_ready", job_id=job_id or "-")
-                    if self._is_fee_ready_boundary_satisfied(session):
-                        self._arm_fee_route(session, "fresh_fee_notify_after_boundary", job_id=job_id)
-                    target = "main"
+                target = await self._select_notify_route(session, controller, tracker, job_id)
                 session.active_label = target
                 difficulty = session.current_difficulty
                 await self._record_route(target, difficulty, tracker)
@@ -496,7 +515,7 @@ class MinerProxy:
             if message.method == "mining.set_extranonce":
                 if not session.awaiting_post_extranonce_job:
                     session.awaiting_post_extranonce_job = True
-                    self._disarm_fee_route(session, "stale_due_to_extranonce_reset")
+                    self._disarm_fee_route(session, "fee_set_extranonce")
                     self._log_session(session, "extranonce_reset_pending")
                 await self._safe_miner_write(miner_writer, line)
                 continue
@@ -569,6 +588,7 @@ class MinerProxy:
 
                 if session.main_authorized or session.fee_authorized or session.job_records:
                     self._invalidate_downstream_jobs(session, "stale_due_to_reauthorize")
+                    self._disarm_fee_route(session, "miner_reauthorize")
 
                 if not session.miner_user:
                     raise RuntimeError("miner username is required before authorize")
@@ -587,8 +607,7 @@ class MinerProxy:
                 fee_resp = await self._rpc(upstream, fee_authorize)
                 session.main_authorized = bool(main_resp.raw.get("result") is True)
                 session.fee_authorized = bool(fee_resp.raw.get("result") is True)
-                if not session.fee_authorized:
-                    self._disarm_fee_route(session, "fee_authorize_failed")
+                self._disarm_fee_route(session, "authorize_result")
 
                 async with self.metrics.lock:
                     if not session.main_authorized:
