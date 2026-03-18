@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.27
+- Add explicit fee-route arming/disarming state so fee jobs are suppressed until the fee path is truly ready after authorize + post-boundary notify.
+- Disarm fee readiness on session start, reconnect/failover/re-authorize invalidation, difficulty pending, extranonce pending, and clean_jobs invalidation while keeping existing stale protections.
+- Add `fee_not_ready_skips` metric and integration tests for fee readiness windows and boundary disarm behavior.
+
+## 0.7.26
+- Defer job-generation invalidation for `mining.set_difficulty` and `mining.set_extranonce` until the next `mining.notify`, with explicit pending/committed epoch logs.
+- Keep immediate invalidation on `clean_jobs=true` and reconnect/failover boundaries, while preserving local stale/unknown submit rejection.
+- Add tests for deferred difficulty/extranonce invalidation behavior and reconnect invalidation safety helper coverage.
+
+## 0.7.25
+- Strengthen downstream job-generation invalidation on upstream mining-state transitions: clean_jobs, set_difficulty epochs, set_extranonce resets, reconnect, and miner re-authorize boundaries.
+- Keep local stale/unknown submit rejection behavior and enrich generation-mismatch reject logs with explicit invalidation causes (e.g. `stale_due_to_clean_jobs`, `stale_due_to_reconnect`).
+- Add integration tests covering stale local rejection after clean_jobs, re-authorize, and extranonce reset boundaries while preserving normal current-generation submit behavior.
+
 ## 0.7.24
 - Pin downstream `mining.submit` route to the job route chosen at `mining.notify` dispatch time, with per-job generation metadata for stale-safety.
 - Remove unsafe unknown-job fallback routing and reject unknown/stale/generation-mismatched submits locally with explicit `event=local_submit_rejected` logging.
