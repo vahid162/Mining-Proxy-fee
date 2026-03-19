@@ -1,15 +1,5 @@
 # Changelog
 
-## 0.7.28
-- Make `simple-forwarder` use env-driven SOCKS settings via `FORWARDER_SOCKS5_HOST` / `FORWARDER_SOCKS5_PORT`, with fallback to shared `SOCKS5_HOST` / `SOCKS5_PORT`.
-- Clarify in README that the optional v2rayA bridge overlay only fixes `simple-forwarder` when its SOCKS chain also points to `v2raya:22070` (or the equivalent env-driven override).
-- Replace the v2rayA Compose healthcheck with a `wget`-based probe on the local UI endpoint instead of a Bash-only `/dev/tcp` check.
-
-## 0.7.27
-- Add explicit fee-route armed/readiness gating so fee dispatch stays on main until authorize/resync boundaries are settled and a fresh post-boundary `mining.notify` arrives.
-- Disarm fee readiness on session start, re-authorize, reconnect, `mining.set_difficulty`, and `mining.set_extranonce`, with greppable logs/metric for skipped fee slices while preserving local stale protections.
-- Add proxy/integration tests covering fee readiness arming/disarming, downstream suppression before arming, and continued main-path mining during fee grace windows.
-
 ## 0.7.26
 - Defer job-generation invalidation for `mining.set_difficulty` and `mining.set_extranonce` until the next `mining.notify`, with explicit pending/committed epoch logs.
 - Keep immediate invalidation on `clean_jobs=true` and reconnect/failover boundaries, while preserving local stale/unknown submit rejection.

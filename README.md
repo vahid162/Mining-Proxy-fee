@@ -41,7 +41,6 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 
 اختیاری (در صورت نیاز):
 - `FORWARDER_UPSTREAM_HOST`, `FORWARDER_UPSTREAM_PORT`
-- `FORWARDER_SOCKS5_HOST`, `FORWARDER_SOCKS5_PORT` (اگر ست نشوند، `simple-forwarder` همان `SOCKS5_HOST`/`SOCKS5_PORT` اصلی را استفاده می‌کند)
 - `LISTEN_PORT`, `METRICS_PORT`
 
 ## Environment variables (مطابق کامل `.env.example`)
@@ -53,7 +52,6 @@ curl http://127.0.0.1:${METRICS_PORT:-9100}
 ### Upstream routing
 - `UPSTREAM_HOST`, `UPSTREAM_PRIMARY_PORT`, `UPSTREAM_SECONDARY_PORT`
 - `FORWARDER_LISTEN_PORT`, `FORWARDER_UPSTREAM_HOST`, `FORWARDER_UPSTREAM_PORT`
-- `FORWARDER_SOCKS5_HOST`, `FORWARDER_SOCKS5_PORT`
 
 ### Auth / Fee control
 - `MAIN_PASSWORD`
@@ -101,13 +99,11 @@ docker compose -f compose.yaml up -d
 > این مسیر فقط fallback است و مسیر canonical پیش‌فرض را عوض نمی‌کند.
 > `compose.v2raya-bridge.yaml` به‌صورت پیش‌فرض داخل `compose.yaml` merge نشده و باید فقط در صورت نیاز با `-f compose.v2raya-bridge.yaml` فعال شود.
 > در overlay هم عمداً `depends_on: condition: service_healthy` استفاده شده (نه `service_started`) تا با الگوی فعلی پروژه برای وابستگی به سلامت `v2raya` هم‌راستا بماند.
-> برای `simple-forwarder` هم این fallback فقط وقتی درست کار می‌کند که chain آن به `v2raya:22070` (یا معادل env-driven همان endpoint) اشاره کند؛ اگر هنوز روی `v2raya:20170` بماند، همان مشکل loopback-only پابرجا می‌ماند.
 
 مراحل فعال‌سازی fallback:
 1) `SOCKS5_HOST=v2raya` را همان‌طور نگه دار.
 2) در `.env` مقدار `SOCKS5_PORT=22070` بگذار.
-3) اگر `simple-forwarder` را هم می‌خواهی از همین fallback عبور بدهی، یا `FORWARDER_SOCKS5_HOST`/`FORWARDER_SOCKS5_PORT` را خالی بگذار تا همان `SOCKS5_*` اصلی inherit شود، یا صریحاً `FORWARDER_SOCKS5_HOST=v2raya` و `FORWARDER_SOCKS5_PORT=22070` تنظیم کن.
-4) استک را با overlay بالا بیاور:
+3) استک را با overlay بالا بیاور:
 
 ```bash
 docker compose -f compose.yaml -f compose.v2raya-bridge.yaml up -d
