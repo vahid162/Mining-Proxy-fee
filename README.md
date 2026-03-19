@@ -3,7 +3,7 @@
 `Mining-Proxy-fee` یک **Stratum-aware mining proxy** برای fee-routing است که به‌صورت Docker-ready برای اجرای تک‌سرور طراحی شده است.
 
 ## What it is
-- مسیر fee-aware روی پورت `LISTEN_PORT` (پیش‌فرض `40040`) با **single-upstream + dual-authorize**: یک اتصال upstream، یک subscribe، و authorize جدا برای main/fee روی همان اتصال.
+- مسیر fee-aware روی پورت `LISTEN_PORT` (پیش‌فرض `40040`) با **dual-upstream session routing**: برای هر miner session یک upstream session برای main و یک upstream session جدا برای fee نگه داشته می‌شود و هر job/submit به همان upstream origin خودش pin می‌ماند.
 - مسیر forwarding ساده روی پورت `60046` فقط برای fallback/rollback عملیاتی (خارج از مسیر نرمال fee-aware).
 - استقرار اپراتوری با Docker Compose و مصرف image آماده از GHCR.
 
