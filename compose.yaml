@@ -12,7 +12,7 @@ services:
     volumes:
       - ./deploy/v2raya:/etc/v2raya
     healthcheck:
-      test: ["CMD", "wget", "-q", "-T", "3", "-O", "/dev/null", "http://127.0.0.1:2017/"]
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/20170' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -56,7 +56,7 @@ services:
         condition: service_healthy
     command:
       - -L=tcp://0.0.0.0:${FORWARDER_LISTEN_PORT:-60046}/${FORWARDER_UPSTREAM_HOST:-bitcoin.viabtc.io}:${FORWARDER_UPSTREAM_PORT:-3333}
-      - -F=socks5://${FORWARDER_SOCKS5_HOST:-${SOCKS5_HOST:-v2raya}}:${FORWARDER_SOCKS5_PORT:-${SOCKS5_PORT:-20170}}
+      - -F=socks5://v2raya:20170
     ports:
       - "${FORWARDER_LISTEN_PORT:-60046}:${FORWARDER_LISTEN_PORT:-60046}"
     logging:
