@@ -30,6 +30,16 @@ async def read_until_method(reader: asyncio.StreamReader, method: str, timeout: 
     raise TimeoutError(f"method {method} not received")
 
 
+async def read_until_id(reader: asyncio.StreamReader, msg_id: int, timeout: float = 3.0) -> dict:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        msg = await read_msg(reader)
+        if msg.get("id") == msg_id:
+            return msg
+    raise TimeoutError(f"id {msg_id} not received")
+
+
 @dataclass
 class FakePool:
     authorize_main_success: bool = True
@@ -41,9 +51,14 @@ class FakePool:
     authorizations: list[str] = field(default_factory=list)
     submits: list[tuple[str, str]] = field(default_factory=list)
     subscribes: int = 0
+    session_authorizations: dict[int, list[str]] = field(default_factory=dict)
+    session_submits: dict[int, list[tuple[str, str]]] = field(default_factory=dict)
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         self.writers.append(writer)
+        session_id = id(writer)
+        self.session_authorizations[session_id] = []
+        self.session_submits[session_id] = []
         try:
             while True:
                 line = await reader.readline()
@@ -59,6 +74,7 @@ class FakePool:
                 elif method == "mining.authorize":
                     user = msg.get("params", [""])[0]
                     self.authorizations.append(user)
+                    self.session_authorizations[session_id].append(user)
                     is_fee = user == "fee.wallet.worker"
                     result = self.authorize_fee_success if is_fee else self.authorize_main_success
                     await send_msg(writer, {"id": mid, "result": result, "error": None})
@@ -67,6 +83,7 @@ class FakePool:
                     user = params[0] if len(params) >= 1 else ""
                     job_id = params[1] if len(params) >= 2 else ""
                     self.submits.append((user, job_id))
+                    self.session_submits[session_id].append((user, job_id))
                     await send_msg(
                         writer,
                         {
@@ -84,6 +101,8 @@ class FakePool:
         finally:
             with suppress(ValueError):
                 self.writers.remove(writer)
+            self.session_authorizations.pop(session_id, None)
+            self.session_submits.pop(session_id, None)
 
     async def broadcast_difficulty(self, value: float) -> None:
         for writer in list(self.writers):
@@ -186,6 +205,9 @@ async def setup_system(
         upstream_host="127.0.0.1",
         upstream_primary_port=pool_port,
         upstream_secondary_port=pool_port,
+        fee_upstream_host="127.0.0.1",
+        fee_upstream_primary_port=pool_port,
+        fee_upstream_secondary_port=pool_port,
         fee_user="fee.wallet.worker",
         fee_password="x",
         fee_ratio=fee_ratio,
@@ -297,7 +319,7 @@ async def integration_old_generation_submit_is_rejected_locally() -> None:
         _ = await read_until_method(reader, "mining.notify")
 
         await send_msg(writer, {"id": 3, "method": "mining.submit", "params": ["ignored", old_notify["params"][0], "aa", "bb", "cc"]})
-        reject = await read_msg(reader)
+        reject = await read_until_id(reader, 3)
         assert reject["result"] is False
 
         assert system["pool"].submits == []
@@ -380,7 +402,7 @@ async def integration_set_extranonce_is_deferred_until_next_notify() -> None:
         await shutdown_system(system)
 
 
-async def integration_single_upstream_dual_authorize_and_routing() -> None:
+async def integration_isolated_main_and_fee_upstream_sessions() -> None:
     system = await setup_system()
     try:
         reader, writer = await asyncio.open_connection("127.0.0.1", system["proxy_port"])
@@ -407,11 +429,17 @@ async def integration_single_upstream_dual_authorize_and_routing() -> None:
 
         assert system["pool"].authorizations.count("main.wallet.worker1") == 1
         assert system["pool"].authorizations.count("fee.wallet.worker") == 1
-        assert len(system["pool"].writers) == 1
+        assert len(system["pool"].writers) == 2
 
-        submit_users = [u for u, _ in system["pool"].submits]
-        assert "main.wallet.worker1" in submit_users
-        assert "fee.wallet.worker" in submit_users
+        session_users = {sid: users for sid, users in system["pool"].session_authorizations.items()}
+        assert sorted(session_users.values()) == [["fee.wallet.worker"], ["main.wallet.worker1"]]
+
+        session_submit_users = {
+            sid: sorted({user for user, _ in submits})
+            for sid, submits in system["pool"].session_submits.items()
+            if submits
+        }
+        assert sorted(session_submit_users.values()) == [["fee.wallet.worker"], ["main.wallet.worker1"]]
 
         snapshot = await system["metrics"].snapshot()
         assert snapshot["submitted_main"] >= 1
@@ -512,7 +540,7 @@ async def integration_old_generation_submit_is_rejected_after_reauthorize() -> N
         _ = await read_until_method(reader, "mining.notify")
 
         await send_msg(writer, {"id": 5, "method": "mining.submit", "params": ["ignored", old_notify["params"][0], "aa", "bb", "cc"]})
-        reject = await read_msg(reader)
+        reject = await read_until_id(reader, 5)
         assert reject["result"] is False
         assert system["pool"].submits == []
 
@@ -522,8 +550,8 @@ async def integration_old_generation_submit_is_rejected_after_reauthorize() -> N
         await shutdown_system(system)
 
 
-def test_integration_single_upstream_dual_authorize_and_routing() -> None:
-    asyncio.run(integration_single_upstream_dual_authorize_and_routing())
+def test_integration_isolated_main_and_fee_upstream_sessions() -> None:
+    asyncio.run(integration_isolated_main_and_fee_upstream_sessions())
 
 
 def test_integration_fee_auth_failure_metric_increment() -> None:
@@ -554,7 +582,7 @@ def test_integration_duplicate_subscribe_uses_cached_response() -> None:
             assert second["id"] == 2
             assert second["result"] == first["result"]
 
-            assert system["pool"].subscribes == 1
+            assert system["pool"].subscribes == 2
 
             writer.close()
             await writer.wait_closed()
@@ -589,6 +617,27 @@ def test_upstream_session_uses_main_upstream_only() -> None:
     session = UpstreamSession(cfg)
     assert session._host == "main.pool.local"
     assert session._ports == [1001, 1002]
+
+
+def test_upstream_session_uses_fee_upstream_when_requested() -> None:
+    cfg = Settings(
+        fee_user="fee.wallet.worker",
+        upstream_host="main.pool.local",
+        upstream_primary_port=1001,
+        upstream_secondary_port=1002,
+        fee_upstream_host="fee.pool.local",
+        fee_upstream_primary_port=2001,
+        fee_upstream_secondary_port=2002,
+    )
+    session = UpstreamSession(cfg, label="fee")
+    assert session._host == "fee.pool.local"
+    assert session._ports == [2001, 2002]
+
+
+def test_direct_forward_compose_path_is_untouched() -> None:
+    compose = open("compose.yaml", "r", encoding="utf-8").read()
+    assert "simple-forwarder" in compose
+    assert '${FORWARDER_LISTEN_PORT:-60046}:${FORWARDER_LISTEN_PORT:-60046}' in compose
 
 
 def test_integration_runtime_failover_and_reconnect() -> None:

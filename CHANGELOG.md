@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.27
+- Split the fee-aware proxy on port `40040` into separate main/fee upstream sessions per miner so fee jobs and fee submits stay on the same upstream-origin session instead of sharing a dual-authorize socket.
+- Preserve Patch 3 local stale/unknown submit rejection while tracking difficulty/extranonce/job-generation independently for `main` vs `fee`.
+- Add integration coverage for isolated upstream sessions, per-label upstream selection, and a regression guard that keeps the direct-forward `simple-forwarder` path on `60046` untouched.
+
 ## 0.7.26
 - Defer job-generation invalidation for `mining.set_difficulty` and `mining.set_extranonce` until the next `mining.notify`, with explicit pending/committed epoch logs.
 - Keep immediate invalidation on `clean_jobs=true` and reconnect/failover boundaries, while preserving local stale/unknown submit rejection.

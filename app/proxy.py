@@ -99,25 +99,34 @@ class MinerMetrics:
 
 
 @dataclass
+class PathState:
+    label: str
+    job_generation: int = 0
+    current_difficulty: float = 1.0
+    awaiting_post_difficulty_job: bool = False
+    awaiting_post_extranonce_job: bool = False
+    last_invalidation_cause: str = "-"
+    authorized: bool = False
+    latest_set_difficulty: bytes | None = None
+    latest_set_extranonce: bytes | None = None
+
+
+@dataclass
 class MinerSessionState:
     session_id: str
     client_addr: str
     miner_user: str | None = None
     miner_password: str = "x"
     active_label: str = "main"
-    job_generation: int = 0
     job_route: dict[str, str] = field(default_factory=dict)
     job_records: dict[str, "DownstreamJobRecord"] = field(default_factory=dict)
     job_difficulty: dict[str, float] = field(default_factory=dict)
-    current_difficulty: float = 1.0
-    awaiting_post_difficulty_job: bool = False
-    awaiting_post_extranonce_job: bool = False
-    last_invalidation_cause: str = "-"
     subscribe_raw: dict[str, Any] | None = None
     subscribe_result: Any = None
     subscribe_error: Any = None
-    main_authorized: bool = False
-    fee_authorized: bool = False
+    path_states: dict[str, PathState] = field(
+        default_factory=lambda: {"main": PathState(label="main"), "fee": PathState(label="fee")}
+    )
 
 
 @dataclass
@@ -129,15 +138,19 @@ class DownstreamJobRecord:
 
 
 class UpstreamSession:
-    def __init__(self, cfg: Settings) -> None:
+    def __init__(self, cfg: Settings, label: str = "main") -> None:
         self.cfg = cfg
-        self.label = "main"
+        self.label = label
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
         self.pending: dict[Any, asyncio.Future[StratumMessage]] = {}
         self.pending_slots = asyncio.Semaphore(cfg.max_pending_rpcs)
-        self._host = self.cfg.upstream_host
-        self._ports = [self.cfg.upstream_primary_port, self.cfg.upstream_secondary_port]
+        if label == "fee":
+            self._host = self.cfg.fee_upstream_host
+            self._ports = [self.cfg.fee_upstream_primary_port, self.cfg.fee_upstream_secondary_port]
+        else:
+            self._host = self.cfg.upstream_host
+            self._ports = [self.cfg.upstream_primary_port, self.cfg.upstream_secondary_port]
         self._active_port_index = 0
         self.connected_port: int | None = None
 
@@ -240,15 +253,41 @@ class MinerProxy:
         last = message.params[-1]
         return isinstance(last, bool) and last
 
-    def _bump_job_generation(self, session: MinerSessionState, reason: str) -> None:
-        session.job_generation += 1
-        session.last_invalidation_cause = reason
-        self._log_session(session, "job_generation_bumped", generation=session.job_generation, reason=reason)
+    def _path_state(self, session: MinerSessionState, label: str) -> PathState:
+        return session.path_states[label]
 
-    def _invalidate_downstream_jobs(self, session: MinerSessionState, reason: str) -> None:
-        self._bump_job_generation(session, reason)
-        session.awaiting_post_difficulty_job = False
-        session.awaiting_post_extranonce_job = False
+    def _bump_job_generation(self, session: MinerSessionState, label: str, reason: str) -> None:
+        state = self._path_state(session, label)
+        state.job_generation += 1
+        state.last_invalidation_cause = reason
+        self._log_session(
+            session,
+            "job_generation_bumped",
+            route=label,
+            generation=state.job_generation,
+            reason=reason,
+        )
+
+    def _invalidate_downstream_jobs(self, session: MinerSessionState, reason: str, label: str | None = None) -> None:
+        labels = [label] if label else ["main", "fee"]
+        for current_label in labels:
+            state = self._path_state(session, current_label)
+            self._bump_job_generation(session, current_label, reason)
+            state.awaiting_post_difficulty_job = False
+            state.awaiting_post_extranonce_job = False
+
+    async def _activate_path_state(
+        self,
+        miner_writer: asyncio.StreamWriter,
+        session: MinerSessionState,
+        label: str,
+    ) -> None:
+        state = self._path_state(session, label)
+        if state.latest_set_extranonce:
+            await self._safe_miner_write(miner_writer, state.latest_set_extranonce)
+        if state.latest_set_difficulty:
+            await self._safe_miner_write(miner_writer, state.latest_set_difficulty)
+        session.active_label = label
 
     def _should_fail_on_fee_startup_error(self) -> bool:
         return self.cfg.fee_path_startup_policy == "strict"
@@ -283,7 +322,7 @@ class MinerProxy:
         accepted_tracker = RatioTracker()
         selection_tracker = SelectionTracker()
         session = MinerSessionState(session_id=session_id, client_addr=client_addr, miner_password=self.cfg.main_password)
-        upstream: UpstreamSession | None = None
+        upstreams: dict[str, UpstreamSession] = {}
         tasks: list[asyncio.Task[Any]] = []
 
         try:
@@ -291,13 +330,31 @@ class MinerProxy:
                 self.metrics.active_miners += 1
 
             self._log_session(session, "session_start")
-            upstream = UpstreamSession(self.cfg)
-            await upstream.connect()
-            self._log_session(session, "upstream_connected", port=upstream.connected_port)
+            upstreams["main"] = UpstreamSession(self.cfg, label="main")
+            upstreams["fee"] = UpstreamSession(self.cfg, label="fee")
+
+            await upstreams["main"].connect()
+            self._log_session(session, "upstream_connected", route="main", port=upstreams["main"].connected_port)
+            try:
+                await upstreams["fee"].connect()
+                self._log_session(session, "upstream_connected", route="fee", port=upstreams["fee"].connected_port)
+            except Exception as exc:  # noqa: BLE001
+                self._log_session(session, "upstream_connect_failed", route="fee", err=exc)
+                if self._should_fail_on_fee_startup_error():
+                    raise
 
             tasks = [
-                asyncio.create_task(self._relay_upstream(upstream, miner_writer, session, controller, selection_tracker)),
-                asyncio.create_task(self._relay_miner(miner_reader, miner_writer, upstream, controller, selection_tracker, accepted_tracker, session)),
+                asyncio.create_task(self._relay_upstream(upstreams["main"], miner_writer, session, controller, selection_tracker)),
+                asyncio.create_task(self._relay_upstream(upstreams["fee"], miner_writer, session, controller, selection_tracker)),
+                asyncio.create_task(
+                    self._relay_miner(
+                        miner_reader,
+                        miner_writer,
+                        upstreams,
+                        accepted_tracker,
+                        session,
+                    )
+                ),
             ]
 
             done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -316,7 +373,7 @@ class MinerProxy:
                     task.cancel()
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
-            if upstream:
+            for upstream in upstreams.values():
                 await upstream.close()
             miner_writer.close()
             try:
@@ -338,18 +395,17 @@ class MinerProxy:
             await self._rpc(upstream, subscribe_payload)
 
         if session.miner_user:
-            main_auth_payload = {
-                "id": 10_000_001,
+            authorize_payload = {
+                "id": 10_000_001 if upstream.label == "main" else 10_000_002,
                 "method": "mining.authorize",
-                "params": [session.miner_user, session.miner_password],
+                "params": (
+                    [session.miner_user, session.miner_password]
+                    if upstream.label == "main"
+                    else [self.cfg.fee_user, self.cfg.fee_password]
+                ),
             }
-            fee_auth_payload = {
-                "id": 10_000_002,
-                "method": "mining.authorize",
-                "params": [self.cfg.fee_user, self.cfg.fee_password],
-            }
-            await self._rpc(upstream, main_auth_payload)
-            await self._rpc(upstream, fee_auth_payload)
+            resp = await self._rpc(upstream, authorize_payload)
+            self._path_state(session, upstream.label).authorized = bool(resp.raw.get("result") is True)
 
     async def _relay_upstream(
         self,
@@ -359,17 +415,20 @@ class MinerProxy:
         controller: FeeController,
         tracker: SelectionTracker,
     ) -> None:
+        path_state = self._path_state(session, upstream.label)
         while True:
             if upstream.reader is None:
                 if not await upstream.reconnect_with_backoff():
                     raise RuntimeError("upstream_permanently_down")
-                self._invalidate_downstream_jobs(session, "stale_due_to_reconnect")
+                self._invalidate_downstream_jobs(session, "stale_due_to_reconnect", label=upstream.label)
                 await self._resync_after_reconnect(upstream, session)
 
                 async with self.metrics.lock:
-                    self.metrics.upstream_reconnects_main += 1
-                    self.metrics.upstream_reconnects_fee += 1
-                self._log_session(session, "upstream_reconnected", port=upstream.connected_port)
+                    if upstream.label == "main":
+                        self.metrics.upstream_reconnects_main += 1
+                    else:
+                        self.metrics.upstream_reconnects_fee += 1
+                self._log_session(session, "upstream_reconnected", route=upstream.label, port=upstream.connected_port)
 
             assert upstream.reader is not None
             try:
@@ -384,17 +443,21 @@ class MinerProxy:
                 self._log_session(session, "upstream_read_error", err=exc, old_port=old_port)
                 if not await upstream.reconnect_with_backoff():
                     raise RuntimeError("upstream_permanently_down") from exc
-                self._invalidate_downstream_jobs(session, "stale_due_to_reconnect")
+                self._invalidate_downstream_jobs(session, "stale_due_to_reconnect", label=upstream.label)
                 await self._resync_after_reconnect(upstream, session)
                 async with self.metrics.lock:
-                    self.metrics.upstream_reconnects_main += 1
-                    self.metrics.upstream_reconnects_fee += 1
-                    if old_port != upstream.connected_port:
-                        self.metrics.upstream_failovers_main += 1
-                        self.metrics.upstream_failovers_fee += 1
+                    if upstream.label == "main":
+                        self.metrics.upstream_reconnects_main += 1
+                        if old_port != upstream.connected_port:
+                            self.metrics.upstream_failovers_main += 1
+                    else:
+                        self.metrics.upstream_reconnects_fee += 1
+                        if old_port != upstream.connected_port:
+                            self.metrics.upstream_failovers_fee += 1
                 self._log_session(
                     session,
                     "upstream_failover",
+                    route=upstream.label,
                     old_port=old_port,
                     new_port=upstream.connected_port,
                 )
@@ -408,44 +471,54 @@ class MinerProxy:
 
             diff = extract_set_difficulty(message)
             if diff is not None:
-                session.current_difficulty = diff
-                if not session.awaiting_post_difficulty_job:
-                    session.awaiting_post_difficulty_job = True
+                path_state.current_difficulty = diff
+                path_state.latest_set_difficulty = line
+                if not path_state.awaiting_post_difficulty_job:
+                    path_state.awaiting_post_difficulty_job = True
                     self._log_session(
                         session,
                         "difficulty_epoch_pending",
+                        route=upstream.label,
                         next_difficulty=round(diff, 6),
                     )
+                if session.active_label == upstream.label:
+                    await self._safe_miner_write(miner_writer, line)
+                continue
 
             if message.method == "mining.notify":
                 job_id = extract_job_id(message)
                 clean_jobs = self._extract_notify_clean_jobs(message)
                 if clean_jobs:
-                    self._bump_job_generation(session, "stale_due_to_clean_jobs")
+                    self._bump_job_generation(session, upstream.label, "stale_due_to_clean_jobs")
 
-                if session.awaiting_post_difficulty_job:
-                    self._bump_job_generation(session, "stale_due_to_difficulty_epoch")
-                    session.awaiting_post_difficulty_job = False
+                if path_state.awaiting_post_difficulty_job:
+                    self._bump_job_generation(session, upstream.label, "stale_due_to_difficulty_epoch")
+                    path_state.awaiting_post_difficulty_job = False
                     self._log_session(
                         session,
                         "difficulty_epoch_committed",
-                        generation=session.job_generation,
+                        route=upstream.label,
+                        generation=path_state.job_generation,
                         job_id=job_id or "-",
                     )
 
-                if session.awaiting_post_extranonce_job:
-                    self._bump_job_generation(session, "stale_due_to_extranonce_reset")
-                    session.awaiting_post_extranonce_job = False
+                if path_state.awaiting_post_extranonce_job:
+                    self._bump_job_generation(session, upstream.label, "stale_due_to_extranonce_reset")
+                    path_state.awaiting_post_extranonce_job = False
                     self._log_session(
                         session,
                         "extranonce_reset_committed",
-                        generation=session.job_generation,
+                        route=upstream.label,
+                        generation=path_state.job_generation,
                         job_id=job_id or "-",
                     )
 
                 target = await self._select_path(controller, tracker)
-                session.active_label = target
-                difficulty = session.current_difficulty
+                if target != upstream.label:
+                    self._log_session(session, "notify_skipped", route=upstream.label, selected=target, job_id=job_id or "-")
+                    continue
+                await self._activate_path_state(miner_writer, session, upstream.label)
+                difficulty = path_state.current_difficulty
                 await self._record_route(target, difficulty, tracker)
                 if job_id:
                     session.job_difficulty[job_id] = difficulty
@@ -453,18 +526,20 @@ class MinerProxy:
                     session.job_records[job_id] = DownstreamJobRecord(
                         route=target,
                         upstream_job_id=job_id,
-                        generation=session.job_generation,
+                        generation=path_state.job_generation,
                         clean_jobs=clean_jobs,
                     )
                 await self._safe_miner_write(miner_writer, line)
-                self._log_session(session, "notify_forwarded", path=target, job_id=job_id or "-")
+                self._log_session(session, "notify_forwarded", path=target, upstream=upstream.label, job_id=job_id or "-")
                 continue
 
             if message.method == "mining.set_extranonce":
-                if not session.awaiting_post_extranonce_job:
-                    session.awaiting_post_extranonce_job = True
-                    self._log_session(session, "extranonce_reset_pending")
-                await self._safe_miner_write(miner_writer, line)
+                path_state.latest_set_extranonce = line
+                if not path_state.awaiting_post_extranonce_job:
+                    path_state.awaiting_post_extranonce_job = True
+                    self._log_session(session, "extranonce_reset_pending", route=upstream.label)
+                if session.active_label == upstream.label:
+                    await self._safe_miner_write(miner_writer, line)
                 continue
 
             if message.method == "mining.set_difficulty":
@@ -496,12 +571,12 @@ class MinerProxy:
         self,
         miner_reader: asyncio.StreamReader,
         miner_writer: asyncio.StreamWriter,
-        upstream: UpstreamSession,
-        controller: FeeController,
-        selection_tracker: SelectionTracker,
+        upstreams: dict[str, UpstreamSession],
         accepted_tracker: RatioTracker,
         session: MinerSessionState,
     ) -> None:
+        main_upstream = upstreams["main"]
+        fee_upstream = upstreams["fee"]
         while True:
             line = await miner_reader.readline()
             if not line:
@@ -512,10 +587,17 @@ class MinerProxy:
             if method == "mining.subscribe":
                 if session.subscribe_raw is None:
                     session.subscribe_raw = dict(msg.raw)
-                    resp = await self._rpc(upstream, msg.raw)
-                    session.subscribe_result = resp.raw.get("result")
-                    session.subscribe_error = resp.raw.get("error")
-                    await self._safe_miner_write(miner_writer, resp.dumps())
+                    main_resp = await self._rpc(main_upstream, msg.raw)
+                    fee_resp: StratumMessage | None = None
+                    try:
+                        fee_resp = await self._rpc(fee_upstream, dict(msg.raw))
+                    except Exception as exc:  # noqa: BLE001
+                        self._log_session(session, "subscribe_failed", route="fee", err=exc)
+                        if self._should_fail_on_fee_startup_error():
+                            raise
+                    session.subscribe_result = main_resp.raw.get("result")
+                    session.subscribe_error = main_resp.raw.get("error")
+                    await self._safe_miner_write(miner_writer, main_resp.dumps())
                     self._log_session(session, "subscribe_ok")
                 else:
                     cached = {
@@ -533,7 +615,7 @@ class MinerProxy:
                 if len(msg.params) >= 2 and isinstance(msg.params[1], str):
                     session.miner_password = msg.params[1]
 
-                if session.main_authorized or session.fee_authorized or session.job_records:
+                if any(state.authorized for state in session.path_states.values()) or session.job_records:
                     self._invalidate_downstream_jobs(session, "stale_due_to_reauthorize")
 
                 if not session.miner_user:
@@ -549,21 +631,26 @@ class MinerProxy:
                     "method": "mining.authorize",
                     "params": [self.cfg.fee_user, self.cfg.fee_password],
                 }
-                main_resp = await self._rpc(upstream, main_authorize)
-                fee_resp = await self._rpc(upstream, fee_authorize)
-                session.main_authorized = bool(main_resp.raw.get("result") is True)
-                session.fee_authorized = bool(fee_resp.raw.get("result") is True)
+                main_resp = await self._rpc(main_upstream, main_authorize)
+                fee_resp = await self._rpc(fee_upstream, fee_authorize)
+                session.path_states["main"].authorized = bool(main_resp.raw.get("result") is True)
+                session.path_states["fee"].authorized = bool(fee_resp.raw.get("result") is True)
 
                 async with self.metrics.lock:
-                    if not session.main_authorized:
+                    if not session.path_states["main"].authorized:
                         self.metrics.auth_failures_main += 1
-                    if not session.fee_authorized:
+                    if not session.path_states["fee"].authorized:
                         self.metrics.auth_failures_fee += 1
 
-                self._log_session(session, "authorize_result", main_ok=session.main_authorized, fee_ok=session.fee_authorized)
+                self._log_session(
+                    session,
+                    "authorize_result",
+                    main_ok=session.path_states["main"].authorized,
+                    fee_ok=session.path_states["fee"].authorized,
+                )
                 if fee_resp.raw.get("error"):
                     self._log_session(session, "fee_authorize_error", error=fee_resp.raw.get("error"))
-                if not session.fee_authorized and self._should_fail_on_fee_startup_error():
+                if not session.path_states["fee"].authorized and self._should_fail_on_fee_startup_error():
                     raise RuntimeError("fee_authorize_failed")
                 await self._safe_miner_write(miner_writer, main_resp.dumps())
                 continue
@@ -587,7 +674,9 @@ class MinerProxy:
                     await self._safe_miner_write(miner_writer, StratumMessage(local_reject).dumps())
                     continue
 
-                if job_record.generation != session.job_generation:
+                route = job_record.route
+                path_state = self._path_state(session, route)
+                if job_record.generation != path_state.job_generation:
                     async with self.metrics.lock:
                         self.metrics.job_mismatch_count += 1
                         self.metrics.local_submit_rejects += 1
@@ -597,8 +686,8 @@ class MinerProxy:
                         reason="generation_mismatch",
                         job_id=job_id or "-",
                         job_generation=job_record.generation,
-                        active_generation=session.job_generation,
-                        invalidation_cause=session.last_invalidation_cause,
+                        active_generation=path_state.job_generation,
+                        invalidation_cause=path_state.last_invalidation_cause,
                     )
                     local_reject = {
                         "id": msg.msg_id,
@@ -608,19 +697,18 @@ class MinerProxy:
                     await self._safe_miner_write(miner_writer, StratumMessage(local_reject).dumps())
                     continue
 
-                route = job_record.route
-
                 session.active_label = route
-                difficulty = session.job_difficulty.get(job_id or "", session.current_difficulty)
+                difficulty = session.job_difficulty.get(job_id or "", path_state.current_difficulty)
 
                 params = list(msg.params)
+                submit_upstream = fee_upstream if route == "fee" else main_upstream
                 if route == "fee":
                     if not params:
                         params = [self.cfg.fee_user]
                     else:
                         params[0] = self.cfg.fee_user
                     req = {"id": msg.msg_id, "method": "mining.submit", "params": params}
-                    resp = await self._rpc(upstream, req)
+                    resp = await self._rpc(submit_upstream, req)
                     async with self.metrics.lock:
                         self.metrics.submitted_fee += 1
                         if resp.raw.get("result") is True:
@@ -633,7 +721,7 @@ class MinerProxy:
                     if params and session.miner_user:
                         params[0] = session.miner_user
                     req = {"id": msg.msg_id, "method": "mining.submit", "params": params}
-                    resp = await self._rpc(upstream, req)
+                    resp = await self._rpc(submit_upstream, req)
                     async with self.metrics.lock:
                         self.metrics.submitted_main += 1
                         if resp.raw.get("result") is True:
@@ -655,6 +743,6 @@ class MinerProxy:
                 await self._safe_miner_write(miner_writer, resp.dumps())
                 continue
 
-            resp = await self._rpc(upstream, msg.raw)
+            resp = await self._rpc(main_upstream, msg.raw)
             self._log_session(session, "forward_main_method", method=method or "-")
             await self._safe_miner_write(miner_writer, resp.dumps())
